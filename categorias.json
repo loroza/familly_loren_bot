@@ -1,0 +1,385 @@
+{
+  "receitas": {
+    "icon": "🟩",
+    "categorias": {
+      "rendimentos_do_trabalho_assalariado": {
+        "icon": "💼",
+        "subcategorias": [
+          "salario",
+          "ordenado",
+          "horas extras",
+          "bonus",
+          "gratificacoes",
+          "comissoes",
+          "adicionais",
+          "participacao lucros plr",
+          "beneficios em valor"
+        ]
+      },
+      "rendimentos_do_trabalho_autonomo_e_prestacao_servicos": {
+        "icon": "🛠️",
+        "subcategorias": [
+          "honorarios profissionais",
+          "freelance",
+          "consultoria",
+          "servicos por projeto",
+          "comissoes corretagem representacao"
+        ]
+      },
+      "rendimentos_de_atividade_empresarial": {
+        "icon": "🏢",
+        "subcategorias": [
+          "vendas de produtos",
+          "prestacao de servicos",
+          "vendas online ecommerce",
+          "vendas atacado",
+          "vendas varejo",
+          "exportacao"
+        ]
+      },
+      "receita_de_assinatura_saas_recorrente": {
+        "icon": "🔄",
+        "subcategorias": [
+          "mensalidades",
+          "planos anuais",
+          "renovacoes",
+          "upgrades addons",
+          "taxas de instalacao setup"
+        ]
+      },
+      "investimentos_financeiros": {
+        "icon": "📈",
+        "subcategorias": [
+          "juros renda fixa",
+          "dividendos",
+          "juros sobre capital proprio",
+          "rendimentos lci lca",
+          "rendimentos fundos de investimento",
+          "rendimentos fiis",
+          "ganhos cambiais recebidos"
+        ]
+      },
+      "ganhos_de_capital": {
+        "icon": "💰",
+        "subcategorias": [
+          "venda acoes ganho",
+          "venda criptomoedas ganho",
+          "venda imoveis ganho de capital",
+          "venda veiculos ganho",
+          "rendimentos derivativos opcoes"
+        ]
+      },
+      "locacao": {
+        "icon": "🏠",
+        "subcategorias": [
+          "aluguel residencial",
+          "aluguel comercial",
+          "locacao por temporada",
+          "subarrendamento",
+          "receita airbnb"
+        ]
+      },
+      "aposentadoria_beneficios_governamentais": {
+        "icon": "👴",
+        "subcategorias": [
+          "aposentadoria",
+          "pensao",
+          "beneficio inss",
+          "auxilios governamentais"
+        ]
+      },
+      "bolsas_auxilios_subsidios": {
+        "icon": "🎓",
+        "subcategorias": [
+          "bolsa estudo",
+          "bolsa pesquisa",
+          "subsidios publicos",
+          "incentivos fiscais recebidos"
+        ]
+      },
+      "receitas_eventuais": {
+        "icon": "🎰",
+        "subcategorias": [
+          "premios loteria",
+          "heranca",
+          "doacoes recebidas",
+          "indenizacoes seguros recebidos",
+          "reembolsos eventuais"
+        ]
+      },
+      "receitas_digitais_e_conteudo": {
+        "icon": "📱",
+        "subcategorias": [
+          "monetizacao youtube",
+          "twitch receitas",
+          "receitas afiliados",
+          "venda cursos online",
+          "assinaturas conteudo",
+          "royalties digitais"
+        ]
+      },
+      "royalties_licencas_franquias": {
+        "icon": "📜",
+        "subcategorias": [
+          "royalties licenca marca",
+          "taxas franquia",
+          "sublicencas"
+        ]
+      },
+      "receitas_financeiras_ativas": {
+        "icon": "🏦",
+        "subcategorias": [
+          "juros recebidos de emprestimos",
+          "rendimentos conta corrente poupanca",
+          "descontos financeiros recebidos"
+        ]
+      },
+      "outras_receitas": {
+        "icon": "🟩",
+        "subcategorias": [
+          "multas recebidas",
+          "recuperacao creditos",
+          "venda sucata",
+          "outras receitas eventuais"
+        ]
+      }
+    }
+  },
+  "despesas": {
+    "icon": "🟥",
+    "categorias": {
+      "moradia": {
+        "icon": "🏠",
+        "subcategorias": [
+          "aluguel",
+          "prestacao imovel financiamento",
+          "condominio",
+          "iptu",
+          "manutencao imovel",
+          "reformas",
+          "seguro residencial"
+        ]
+      },
+      "utilidades_e_servicos": {
+        "icon": "🔌",
+        "subcategorias": [
+          "energia eletrica",
+          "agua",
+          "gás",
+          "coleta lixo",
+          "internet",
+          "tv a cabo",
+          "telefonia fixa",
+          "telefonia movel"
+        ]
+      },
+      "alimentacao": {
+        "icon": "🍕",
+        "subcategorias": [
+          "supermercado",
+          "restaurantes",
+          "delivery",
+          "marmitas lanches"
+        ]
+      },
+      "transporte": {
+        "icon": "🚗",
+        "subcategorias": [
+          "combustivel",
+          "manutencao veicular",
+          "seguro veicular",
+          "ipva",
+          "transporte publico",
+          "taxi uber",
+          "estacionamento",
+          "pedagios",
+          "aluguel veiculo"
+        ]
+      },
+      "saude": {
+        "icon": "🏥",
+        "subcategorias": [
+          "plano de saude",
+          "consultas medicas",
+          "exames",
+          "medicamentos",
+          "odontologia",
+          "psicologia",
+          "fisioterapia",
+          "seguros saude"
+        ]
+      },
+      "seguros": {
+        "icon": "🛡️",
+        "subcategorias": [
+          "seguro vida",
+          "seguro carro",
+          "seguro residencial",
+          "seguro viagem",
+          "seguro responsabilidade civil"
+        ]
+      },
+      "educacao": {
+        "icon": "📚",
+        "subcategorias": [
+          "mensalidades escola",
+          "mensalidade faculdade",
+          "cursos e workshops",
+          "material didatico",
+          "transporte escolar"
+        ]
+      },
+      "familia_e_dependentes": {
+        "icon": "👨‍👩‍👧",
+        "subcategorias": [
+          "creche babysitter",
+          "pensão alimenticia",
+          "despesas criancas",
+          "cuidados idosos"
+        ]
+      },
+      "lazer_entretenimento": {
+        "icon": "🍿",
+        "subcategorias": [
+          "viagens",
+          "passeios",
+          "ingressos cinema teatro",
+          "assinaturas streaming",
+          "hobbies eventos",
+          "restaurantes lazer"
+        ]
+      },
+      "cuidados_pessoais": {
+        "icon": "✨",
+        "subcategorias": [
+          "roupas",
+          "calcados",
+          "cosmeticos",
+          "salao beleza barbearia",
+          "academia",
+          "bem estarpessoal"
+        ]
+      },
+      "pets": {
+        "icon": "🐾",
+        "subcategorias": [
+          "racao",
+          "veterinario",
+          "banho tosa",
+          "vacinas",
+          "higiene e acessorios"
+        ]
+      },
+      "assinaturas_e_softwares": {
+        "icon": "🖥️",
+        "subcategorias": [
+          "streaming video",
+          "streaming musica",
+          "softwares saas",
+          "cloud services",
+          "revistas jornais"
+        ]
+      },
+      "impostos_taxas_e_contribuicoes": {
+        "icon": "💸",
+        "subcategorias": [
+          "imposto de renda",
+          "impostos estaduais municipais",
+          "taxas cartao",
+          "taxas bancarias",
+          "contribuicoes sociais"
+        ]
+      },
+      "servicos_financeiros": {
+        "icon": "💳",
+        "subcategorias": [
+          "juros emprestimos",
+          "juros cartao credito",
+          "parcelas financiamento",
+          "tarifas bancarias",
+          "iof e outros impostos financeiros"
+        ]
+      },
+      "investimentos_e_poupanca": {
+        "icon": "🐷",
+        "subcategorias": [
+          "aportes em investimentos",
+          "previdencia privada",
+          "poupanca",
+          "reserva emergencia"
+        ]
+      },
+      "doacoes_contribuicoes": {
+        "icon": "🤝",
+        "subcategorias": [
+          "doacoes instituicoes",
+          "campanhas crowdfunding",
+          "contribuicoes missionarias"
+        ]
+      },
+      "manutencao_reparos_servicos_domesticos": {
+        "icon": "🔨",
+        "subcategorias": [
+          "consertos",
+          "servicos eletricista",
+          "servicos encanador",
+          "limpeza domestica",
+          "jardinagem"
+        ]
+      },
+      "compras_e_bens_duraveis": {
+        "icon": "🛍️",
+        "subcategorias": [
+          "eletroeletronicos",
+          "telefonia e acessorios",
+          "presentes",
+          "compras online",
+          "moveis",
+          "eletrodomesticos",
+          "decoracao",
+          "utensilios domesticos"
+        ]
+      },
+      "parcelamentos_e_financiamentos": {
+        "icon": "📑",
+        "subcategorias": [
+          "parcelas cartao",
+          "financiamento imovel",
+          "financiamento veiculo",
+          "outros emprestimos pessoais"
+        ]
+      },
+      "multas_penalidades_e_juros": {
+        "icon": "⚠️",
+        "subcategorias": [
+          "multas transito",
+          "juros mora",
+          "penalidades contratuais"
+        ]
+      },
+      "despesas_trabalho_empresariais": {
+        "icon": "🏭",
+        "subcategorias": [
+          "custo mercadorias vendidas cmv",
+          "despesas com pessoal salarios beneficios",
+          "marketing publicidade",
+          "viagens e despesas comerciais",
+          "material de escritorio",
+          "servicos profissionais contabilidade advocacia",
+          "aluguel estabelecimento",
+          "frete logistica",
+          "depreciacao amortizacao",
+          "impostos empresariais"
+        ]
+      },
+      "outras_despesas": {
+        "icon": "🟥",
+        "subcategorias": [
+          "reembolsos",
+          "despesas eventuais",
+          "outras despesas nao classificadas"
+        ]
+      }
+    }
+  }
+}

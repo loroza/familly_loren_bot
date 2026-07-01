@@ -300,7 +300,7 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
             tot = item.get("parcelas_total")
             parcela_str = f" ({num}/{tot})"
 
-        output.append(f"     {escopo_icon} {parcela_str} {desc}\n          `{fmt(val)}`")
+        output.append(f"     {escopo_icon} {parcela_str} {desc}\n           `{fmt(val)}`")
 
     return output
 

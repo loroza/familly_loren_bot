@@ -68,8 +68,9 @@ def scope_keyboard():
 def payment_method_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="💳 Cartão de Crédito"), KeyboardButton(text="💸 Pix / Dinheiro")],
-            [KeyboardButton(text="📄 Boleto"), KeyboardButton(text="🔄 Débito Automático")]
+            [KeyboardButton(text="💳 Cartão de Crédito"), KeyboardButton(text="💳 Cartão de Débito")],
+            [KeyboardButton(text="💸 Pix / Dinheiro"), KeyboardButton(text="📄 Boleto")],
+            [KeyboardButton(text="🔄 Débito Automático")]
         ],
         resize_keyboard=True,
         one_time_keyboard=True

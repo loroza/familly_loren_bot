@@ -40,9 +40,9 @@ def resolve_callback(callback_data: str) -> str:
         return CALLBACK_MAP.get(callback_data, callback_data)
     return callback_data
 
-# ─── Menus principais (ReplyKeyboard) ──────────────────────────────────────────
+# ─── Menu Principal (ReplyKeyboard) ────────────────────────────────────────────
 
-def main_menu():
+def main_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="➕ Nova Receita"), KeyboardButton(text="➖ Nova Despesa")],
@@ -51,6 +51,96 @@ def main_menu():
         ],
         resize_keyboard=True
     )
+
+# ─── Escopo (ReplyKeyboard) ─────────────────────────────────────────────────────
+
+def scope_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="👤 Pessoal"), KeyboardButton(text="🏠 Ambos")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+# ─── Forma de Pagamento (ReplyKeyboard) ────────────────────────────────────────
+
+def payment_method_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="💳 Cartão de Crédito"), KeyboardButton(text="💸 Pix / Dinheiro")],
+            [KeyboardButton(text="📄 Boleto"), KeyboardButton(text="🔄 Débito Automático")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+# ─── Tipo de Pagamento (ReplyKeyboard) ─────────────────────────────────────────
+
+def payment_type_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📦 À Vista"), KeyboardButton(text="🗓️ Parcelado")]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+# ─── Categorias Dinâmicas (ReplyKeyboard) ──────────────────────────────────────
+
+def _get_emoji_for_category(value_obj):
+    icon = value_obj.get("icon", "")
+    if isinstance(icon, str) and len(icon) <= 4:
+        return icon
+    return ""
+
+def get_main_category_keyboard(tipo: str):
+    data = load_categories()
+    categories = data.get(tipo, {}).get("categorias", {})
+    buttons = []
+    row = []
+    for key, value in categories.items():
+        emoji = _get_emoji_for_category(value)
+        label = f"{emoji} {key.replace('_', ' ').title()}".strip()
+        row.append(KeyboardButton(text=label))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([KeyboardButton(text="⬅️ Voltar")])
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
+
+def get_subcategory_keyboard(tipo: str, categoria_key: str):
+    data = load_categories()
+    # Tenta encontrar a chave exata ou normalizada
+    categories = data.get(tipo, {}).get("categorias", {})
+    cat_data = categories.get(categoria_key, {})
+
+    # Fallback: busca pela chave normalizada caso o texto venha com emoji/espaço
+    if not cat_data:
+        for key, value in categories.items():
+            emoji = _get_emoji_for_category(value)
+            label = f"{emoji} {key.replace('_', ' ').title()}".strip()
+            if label == categoria_key.strip():
+                cat_data = value
+                break
+
+    sub_list = cat_data.get("subcategorias", [])
+    buttons = []
+    row = []
+    for sub in sub_list:
+        sub_label = sub if isinstance(sub, str) else sub.get("label", "")
+        row.append(KeyboardButton(text=sub_label))
+        if len(row) == 2:
+            buttons.append(row)
+            row = []
+    if row:
+        buttons.append(row)
+    buttons.append([KeyboardButton(text="⬅️ Voltar")])
+    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
+
+# ─── Relatório (ReplyKeyboard) ─────────────────────────────────────────────────
 
 def report_menu_keyboard():
     return ReplyKeyboardMarkup(
@@ -62,115 +152,9 @@ def report_menu_keyboard():
         resize_keyboard=True
     )
 
-# ─── Fluxo de cadastro (ReplyKeyboard) ─────────────────────────────────────────
+# ─── Ver Lançamentos (InlineKeyboard — único inline do projeto) ─────────────────
 
-def transaction_type_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📈 Receita"), KeyboardButton(text="📉 Despesa")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-def scope_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="👤 Pessoal"), KeyboardButton(text="🏠 Ambos")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-def payment_type_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="💳 Único"), KeyboardButton(text="🔢 Parcelado")],
-            [KeyboardButton(text="🔁 Recorrente")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-def payment_method_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="💵 Dinheiro"), KeyboardButton(text="💳 Cartão")],
-            [KeyboardButton(text="🔁 Pix/Transfer"), KeyboardButton(text="🏦 Transferência")],
-            [KeyboardButton(text="🧾 Outro")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-def confirm_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="✅ Confirmar"), KeyboardButton(text="❌ Cancelar")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-def skip_keyboard():
-    """Teclado com opção de pular campo opcional."""
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="⏭ Pular")]
-        ],
-        resize_keyboard=True,
-        one_time_keyboard=True
-    )
-
-# ─── Categorias dinâmicas (ReplyKeyboard) ──────────────────────────────────────
-
-def _get_emoji_for_category(value_obj):
-    icon = value_obj.get("icon", "")
-    if isinstance(icon, str) and len(icon) <= 4:
-        return icon
-    return "📁"
-
-def get_main_category_keyboard(tipo: str):
-    data = load_categories()
-    categories = data.get(tipo, {}).get("categorias", {})
-    buttons = []
-    row = []
-    for key, value in categories.items():
-        emoji = _get_emoji_for_category(value)
-        label = f"{emoji} {key.replace('_', ' ').title()}"
-        row.append(KeyboardButton(text=label))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    buttons.append([KeyboardButton(text="❌ Cancelar")])
-    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
-
-def get_subcategory_keyboard(tipo: str, categoria_key: str):
-    data = load_categories()
-    sub_list = (
-        data.get(tipo, {})
-            .get("categorias", {})
-            .get(categoria_key, {})
-            .get("subcategorias", [])
-    )
-    buttons = []
-    row = []
-    for sub in sub_list:
-        sub_label = sub if isinstance(sub, str) else sub.get("label", "")
-        row.append(KeyboardButton(text=f"🔹 {sub_label}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
-    buttons.append([KeyboardButton(text="⬅️ Voltar"), KeyboardButton(text="❌ Cancelar")])
-    return ReplyKeyboardMarkup(keyboard=buttons, resize_keyboard=True, one_time_keyboard=True)
-
-# ─── Inline exclusivo para ações sobre mensagens ───────────────────────────────
-
-def detail_inline_keyboard(ano: int, mes: int, user_id):
+def detail_inline_keyboard(ano: int, mes: int, user_id: str):
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(
             text="🔍 Ver Lançamentos",

@@ -72,22 +72,34 @@ async def insert_transacao(payload: dict):
 
 # ─── Expansão de parcelas ───────────────────────────────────────────────────────
 
+def _to_date(value) -> date | None:
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None
+
+
 def _expand_transacao(row: dict) -> list[dict]:
     """
-    Recebe uma transação e retorna uma lista de "ocorrências" mensais.
-
-    - Único / Recorrente: retorna 1 item usando data_vencimento (ou data_transacao).
-    - Parcelado: expande em N itens, um por mês a partir de data_vencimento,
-      com valor = valor_total / parcelas_total e numero_parcela = 1..N.
+    Recebe uma transação e retorna uma lista de ocorrências mensais.
+    - Único / Recorrente: 1 item usando data_vencimento (ou data_transacao).
+    - Parcelado: N itens, um por mês a partir de data_vencimento.
+    Retorna [] se não houver data válida.
     """
     tipo_pag = row.get("tipo_pagamento") or "unico"
     parcelas_total = row.get("parcelas_total") or 1
     valor_total = float(row.get("valor") or 0.0)
-    data_venc = row.get("data_vencimento") or row.get("data_transacao")
 
-    # Garante que data_venc é um objeto date
-    if isinstance(data_venc, str):
-        data_venc = date.fromisoformat(data_venc)
+    data_venc = _to_date(row.get("data_vencimento")) or _to_date(row.get("data_transacao"))
+
+    if data_venc is None:
+        return []
 
     if tipo_pag != "parcelado" or parcelas_total <= 1:
         item = dict(row)
@@ -110,23 +122,29 @@ def _expand_transacao(row: dict) -> list[dict]:
 
 
 def _filter_by_month(expanded: list[dict], ano: int, mes: int) -> list[dict]:
-    """Filtra ocorrências cujo vencimento_parcela pertence ao mês/ano."""
-    return [
-        item for item in expanded
-        if item["vencimento_parcela"].year == ano
-        and item["vencimento_parcela"].month == mes
-    ]
+    resultado = []
+    for item in expanded:
+        venc = item.get("vencimento_parcela")
+        if venc is None:
+            continue
+        venc = _to_date(venc)
+        if venc is None:
+            continue
+        if venc.year == ano and venc.month == mes:
+            resultado.append(item)
+    return resultado
 
 
-# ─── Relatórios ────────────────────────────────────────────────────────────────
+def _date_in_month(d, ano: int, mes: int) -> bool:
+    d = _to_date(d)
+    if d is None:
+        return False
+    return d.year == ano and d.month == mes
 
-async def _fetch_all_transacoes(telegram_user_id: str) -> list[dict]:
-    """
-    Busca todas as transações visíveis para o usuário:
-    - Receitas: apenas do próprio usuário
-    - Despesas pessoais: apenas do próprio usuário
-    - Despesas 'ambos': de qualquer usuário
-    """
+
+# ─── Fetch base ────────────────────────────────────────────────────────────────
+
+async def _fetch_all_transacoes(telegram_user_id: str):
     async with pool.acquire() as conn:
         receitas = await conn.fetch("""
             SELECT * FROM transacoes
@@ -150,20 +168,16 @@ async def _fetch_all_transacoes(telegram_user_id: str) -> list[dict]:
     )
 
 
+# ─── Relatórios ────────────────────────────────────────────────────────────────
+
 async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict:
-    """
-    Retorna o resumo financeiro de um mês específico.
-    Parcelas são distribuídas pelo mês do vencimento, não da compra.
-    """
     receitas_raw, desp_pessoal_raw, desp_ambos_raw = await _fetch_all_transacoes(telegram_user_id)
 
-    # Receitas: filtrar pelo mês da data_transacao (receitas não são parceladas)
     receitas = [
         r for r in receitas_raw
         if _date_in_month(r.get("data_transacao"), ano, mes)
     ]
 
-    # Despesas: expandir parcelas e filtrar pelo mês do vencimento
     desp_pessoal = _filter_by_month(
         [item for r in desp_pessoal_raw for item in _expand_transacao(r)],
         ano, mes
@@ -173,12 +187,12 @@ async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict
         ano, mes
     )
 
-    total_receitas  = sum(float(r["valor"]) for r in receitas)
-    total_pessoal   = sum(item["valor_parcela"] for item in desp_pessoal)
-    total_ambos     = sum(item["valor_parcela"] for item in desp_ambos)
-    total_lancado   = total_pessoal + total_ambos
-    meu_custo_real  = total_pessoal + (total_ambos * 0.5)
-    sobra           = total_receitas - meu_custo_real
+    total_receitas = sum(float(r["valor"]) for r in receitas)
+    total_pessoal  = sum(item["valor_parcela"] for item in desp_pessoal)
+    total_ambos    = sum(item["valor_parcela"] for item in desp_ambos)
+    total_lancado  = total_pessoal + total_ambos
+    meu_custo_real = total_pessoal + (total_ambos * 0.5)
+    sobra          = total_receitas - meu_custo_real
 
     def agrupar(rows, campo_valor="valor_parcela"):
         grupos = {}
@@ -206,10 +220,6 @@ async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict
 
 
 async def get_months_with_installments() -> list[tuple[int, int]]:
-    """
-    Retorna todos os meses futuros que possuem parcelas previstas,
-    calculando os vencimentos a partir de data_vencimento + relativedelta.
-    """
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT data_vencimento, parcelas_total
@@ -223,9 +233,9 @@ async def get_months_with_installments() -> list[tuple[int, int]]:
     hoje = date.today()
 
     for row in rows:
-        data_venc = row["data_vencimento"]
-        if isinstance(data_venc, str):
-            data_venc = date.fromisoformat(data_venc)
+        data_venc = _to_date(row["data_vencimento"])
+        if data_venc is None:
+            continue
         parcelas = row["parcelas_total"] or 1
         for i in range(parcelas):
             venc = data_venc + relativedelta(months=i)
@@ -236,10 +246,6 @@ async def get_months_with_installments() -> list[tuple[int, int]]:
 
 
 async def get_installments_for_month(ano: int, mes: int) -> list[dict]:
-    """
-    Retorna as parcelas previstas para um mês futuro,
-    expandindo corretamente a partir de data_vencimento.
-    """
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT * FROM transacoes
@@ -251,18 +257,8 @@ async def get_installments_for_month(ano: int, mes: int) -> list[dict]:
     for row in rows:
         expanded = _expand_transacao(dict(row))
         for item in expanded:
-            v = item["vencimento_parcela"]
-            if v.year == ano and v.month == mes:
+            v = item.get("vencimento_parcela")
+            if v and v.year == ano and v.month == mes:
                 resultado.append(item)
 
     return resultado
-
-
-# ─── Helpers ───────────────────────────────────────────────────────────────────
-
-def _date_in_month(d, ano: int, mes: int) -> bool:
-    if d is None:
-        return False
-    if isinstance(d, str):
-        d = date.fromisoformat(d)
-    return d.year == ano and d.month == mes

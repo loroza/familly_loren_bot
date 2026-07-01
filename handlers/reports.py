@@ -224,7 +224,7 @@ async def show_detail(callback: CallbackQuery):
                 tipo_pag = item.get("tipo_pagamento", "")
                 num = item.get("numero_parcela")
                 total_p = item.get("parcelas_total")
-                venc = item.get("vencimento_parcela") or item.get("data_transacao")
+                venc = item.get("vencimento_parcela") or _to_date(item.get("data_transacao"))
                 venc_str = venc.strftime("%d/%m") if venc else "-"
 
                 escopo_icon = "🏠" if escopo == "ambos" else "👤"
@@ -237,3 +237,16 @@ async def show_detail(callback: CallbackQuery):
 
     await callback.message.answer("\n".join(linhas), parse_mode="Markdown")
     await callback.answer()
+
+
+def _to_date(value):
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value)
+        except ValueError:
+            return None
+    return None

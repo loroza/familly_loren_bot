@@ -1,3 +1,4 @@
+# handlers/reports.py
 import logging
 from datetime import date
 
@@ -135,7 +136,7 @@ def _generate_insights(data: dict) -> list[str]:
     return insights
 
 
-# ─── Handlers ──────────────────────────────────────────────────────────────────
+# ─── Handlers ────
 
 @router.message(F.text == "📊 Meu Relatório")
 async def open_report_menu(message: Message):
@@ -148,7 +149,7 @@ async def open_report_menu(message: Message):
 @router.message(F.text == "⬅️ Voltar")
 async def back_to_main(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Menu principal:", reply_markup=keyboards.main_menu())
+    await message.answer("Menu principal:", reply_markup=keyboards.main_menu_keyboard())
 
 
 @router.message(F.text == "📅 Mês Atual")
@@ -193,7 +194,7 @@ async def report_monthly_control(message: Message):
         )
 
 
-# ─── Callback: Ver Lançamentos ─────────────────────────────────────────────────
+# ─── Callback: Ver Lançamentos ────
 
 @router.callback_query(F.data.startswith("detail:"))
 async def show_detail(callback: CallbackQuery):

@@ -281,7 +281,7 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
         # Nível 2: Categoria
         cat = (item.get("categoria_text") or "Outros").title()
         if cat != last_cat:
-            output.append(f"  📂 *{cat}*")
+            output.append(f"\n  📂 *{cat}*")
             last_cat = cat
 
         # Nível 3: Lançamento

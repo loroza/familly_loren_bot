@@ -1,7 +1,8 @@
 import asyncpg
 import logging
-from config import DATABASE_URL
 from datetime import date
+from dateutil.relativedelta import relativedelta
+from config import DATABASE_URL
 
 logger = logging.getLogger(__name__)
 pool: asyncpg.pool.Pool | None = None
@@ -63,79 +64,127 @@ async def insert_transacao(payload: dict):
             payload.get("forma_pagamento"),
             payload.get("tipo_pagamento"),
             payload.get("parcelas_total"),
-            payload.get("data_transacao"),   # já é datetime.date ou None
-            payload.get("data_vencimento"),  # já é datetime.date ou None
+            payload.get("data_transacao"),
+            payload.get("data_vencimento"),
             payload.get("banco"),
         )
 
 
+# ─── Expansão de parcelas ───────────────────────────────────────────────────────
+
+def _expand_transacao(row: dict) -> list[dict]:
+    """
+    Recebe uma transação e retorna uma lista de "ocorrências" mensais.
+
+    - Único / Recorrente: retorna 1 item usando data_vencimento (ou data_transacao).
+    - Parcelado: expande em N itens, um por mês a partir de data_vencimento,
+      com valor = valor_total / parcelas_total e numero_parcela = 1..N.
+    """
+    tipo_pag = row.get("tipo_pagamento") or "unico"
+    parcelas_total = row.get("parcelas_total") or 1
+    valor_total = float(row.get("valor") or 0.0)
+    data_venc = row.get("data_vencimento") or row.get("data_transacao")
+
+    # Garante que data_venc é um objeto date
+    if isinstance(data_venc, str):
+        data_venc = date.fromisoformat(data_venc)
+
+    if tipo_pag != "parcelado" or parcelas_total <= 1:
+        item = dict(row)
+        item["vencimento_parcela"] = data_venc
+        item["numero_parcela"] = 1
+        item["parcelas_total"] = parcelas_total
+        item["valor_parcela"] = valor_total
+        return [item]
+
+    valor_parcela = round(valor_total / parcelas_total, 2)
+    resultado = []
+    for i in range(parcelas_total):
+        item = dict(row)
+        item["vencimento_parcela"] = data_venc + relativedelta(months=i)
+        item["numero_parcela"] = i + 1
+        item["parcelas_total"] = parcelas_total
+        item["valor_parcela"] = valor_parcela
+        resultado.append(item)
+    return resultado
+
+
+def _filter_by_month(expanded: list[dict], ano: int, mes: int) -> list[dict]:
+    """Filtra ocorrências cujo vencimento_parcela pertence ao mês/ano."""
+    return [
+        item for item in expanded
+        if item["vencimento_parcela"].year == ano
+        and item["vencimento_parcela"].month == mes
+    ]
+
+
 # ─── Relatórios ────────────────────────────────────────────────────────────────
+
+async def _fetch_all_transacoes(telegram_user_id: str) -> list[dict]:
+    """
+    Busca todas as transações visíveis para o usuário:
+    - Receitas: apenas do próprio usuário
+    - Despesas pessoais: apenas do próprio usuário
+    - Despesas 'ambos': de qualquer usuário
+    """
+    async with pool.acquire() as conn:
+        receitas = await conn.fetch("""
+            SELECT * FROM transacoes
+            WHERE telegram_user_id = $1 AND tipo = 'receita'
+        """, str(telegram_user_id))
+
+        desp_pessoal = await conn.fetch("""
+            SELECT * FROM transacoes
+            WHERE telegram_user_id = $1 AND tipo = 'despesa' AND escopo = 'pessoal'
+        """, str(telegram_user_id))
+
+        desp_ambos = await conn.fetch("""
+            SELECT * FROM transacoes
+            WHERE tipo = 'despesa' AND escopo = 'ambos'
+        """)
+
+    return (
+        [dict(r) for r in receitas],
+        [dict(r) for r in desp_pessoal],
+        [dict(r) for r in desp_ambos],
+    )
+
 
 async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict:
     """
-    Retorna o resumo financeiro de um mês específico para o usuário.
-    Regra de visibilidade:
-      - Receitas: apenas do próprio usuário
-      - Despesas pessoais: apenas do próprio usuário
-      - Despesas 'ambos': todas (50% entra no custo real do usuário)
+    Retorna o resumo financeiro de um mês específico.
+    Parcelas são distribuídas pelo mês do vencimento, não da compra.
     """
-    async with pool.acquire() as conn:
+    receitas_raw, desp_pessoal_raw, desp_ambos_raw = await _fetch_all_transacoes(telegram_user_id)
 
-        # Receitas do usuário no mês
-        receitas_rows = await conn.fetch("""
-            SELECT categoria_text, subcategoria_text, descricao, valor
-            FROM transacoes
-            WHERE telegram_user_id = $1
-              AND tipo = 'receita'
-              AND EXTRACT(YEAR  FROM data_transacao) = $2
-              AND EXTRACT(MONTH FROM data_transacao) = $3
-            ORDER BY data_transacao
-        """, str(telegram_user_id), ano, mes)
+    # Receitas: filtrar pelo mês da data_transacao (receitas não são parceladas)
+    receitas = [
+        r for r in receitas_raw
+        if _date_in_month(r.get("data_transacao"), ano, mes)
+    ]
 
-        # Despesas pessoais do usuário no mês
-        desp_pessoal_rows = await conn.fetch("""
-            SELECT categoria_text, subcategoria_text, descricao, valor, escopo,
-                   forma_pagamento, tipo_pagamento, parcelas_total, data_transacao, data_vencimento
-            FROM transacoes
-            WHERE telegram_user_id = $1
-              AND tipo = 'despesa'
-              AND escopo = 'pessoal'
-              AND EXTRACT(YEAR  FROM data_transacao) = $2
-              AND EXTRACT(MONTH FROM data_transacao) = $3
-            ORDER BY data_transacao
-        """, str(telegram_user_id), ano, mes)
+    # Despesas: expandir parcelas e filtrar pelo mês do vencimento
+    desp_pessoal = _filter_by_month(
+        [item for r in desp_pessoal_raw for item in _expand_transacao(r)],
+        ano, mes
+    )
+    desp_ambos = _filter_by_month(
+        [item for r in desp_ambos_raw for item in _expand_transacao(r)],
+        ano, mes
+    )
 
-        # Despesas compartilhadas (ambos) no mês — de qualquer usuário
-        desp_ambos_rows = await conn.fetch("""
-            SELECT categoria_text, subcategoria_text, descricao, valor, escopo,
-                   forma_pagamento, tipo_pagamento, parcelas_total, data_transacao, data_vencimento,
-                   telegram_user_id
-            FROM transacoes
-            WHERE tipo = 'despesa'
-              AND escopo = 'ambos'
-              AND EXTRACT(YEAR  FROM data_transacao) = $1
-              AND EXTRACT(MONTH FROM data_transacao) = $2
-            ORDER BY data_transacao
-        """, ano, mes)
+    total_receitas  = sum(float(r["valor"]) for r in receitas)
+    total_pessoal   = sum(item["valor_parcela"] for item in desp_pessoal)
+    total_ambos     = sum(item["valor_parcela"] for item in desp_ambos)
+    total_lancado   = total_pessoal + total_ambos
+    meu_custo_real  = total_pessoal + (total_ambos * 0.5)
+    sobra           = total_receitas - meu_custo_real
 
-    receitas       = [dict(r) for r in receitas_rows]
-    desp_pessoal   = [dict(r) for r in desp_pessoal_rows]
-    desp_ambos     = [dict(r) for r in desp_ambos_rows]
-
-    total_receitas      = sum(float(r["valor"]) for r in receitas)
-    total_pessoal       = sum(float(r["valor"]) for r in desp_pessoal)
-    total_ambos         = sum(float(r["valor"]) for r in desp_ambos)
-    total_lancado       = total_pessoal + total_ambos
-    meu_custo_real      = total_pessoal + (total_ambos * 0.5)
-    sobra               = total_receitas - meu_custo_real
-
-    # Agrupar despesas por categoria
-    def agrupar(rows):
+    def agrupar(rows, campo_valor="valor_parcela"):
         grupos = {}
         for r in rows:
-            cat = r["categoria_text"] or "Outros"
-            grupos.setdefault(cat, 0.0)
-            grupos[cat] += float(r["valor"])
+            cat = r.get("categoria_text") or "Outros"
+            grupos[cat] = grupos.get(cat, 0.0) + float(r.get(campo_valor, 0))
         return grupos
 
     return {
@@ -152,40 +201,68 @@ async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict
         "sobra": round(sobra, 2),
         "grupos_pessoal": agrupar(desp_pessoal),
         "grupos_ambos": agrupar(desp_ambos),
-        "grupos_receitas": agrupar(receitas),
+        "grupos_receitas": agrupar(receitas, campo_valor="valor"),
     }
 
 
 async def get_months_with_installments() -> list[tuple[int, int]]:
     """
-    Retorna lista de (ano, mes) de todos os meses futuros que possuem
-    parcelas previstas (data_vencimento >= hoje).
+    Retorna todos os meses futuros que possuem parcelas previstas,
+    calculando os vencimentos a partir de data_vencimento + relativedelta.
     """
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT DISTINCT
-                EXTRACT(YEAR  FROM data_vencimento)::int AS ano,
-                EXTRACT(MONTH FROM data_vencimento)::int AS mes
+            SELECT data_vencimento, parcelas_total
             FROM transacoes
             WHERE tipo_pagamento = 'parcelado'
-              AND data_vencimento >= CURRENT_DATE
-            ORDER BY ano, mes
+              AND data_vencimento IS NOT NULL
+              AND parcelas_total IS NOT NULL
         """)
-    return [(r["ano"], r["mes"]) for r in rows]
+
+    meses = set()
+    hoje = date.today()
+
+    for row in rows:
+        data_venc = row["data_vencimento"]
+        if isinstance(data_venc, str):
+            data_venc = date.fromisoformat(data_venc)
+        parcelas = row["parcelas_total"] or 1
+        for i in range(parcelas):
+            venc = data_venc + relativedelta(months=i)
+            if venc >= hoje.replace(day=1):
+                meses.add((venc.year, venc.month))
+
+    return sorted(meses)
 
 
 async def get_installments_for_month(ano: int, mes: int) -> list[dict]:
     """
-    Retorna as parcelas previstas para um mês futuro.
+    Retorna as parcelas previstas para um mês futuro,
+    expandindo corretamente a partir de data_vencimento.
     """
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
-            SELECT descricao, categoria_text, valor, parcelas_total,
-                   data_transacao, data_vencimento, escopo, telegram_user_id
-            FROM transacoes
+            SELECT * FROM transacoes
             WHERE tipo_pagamento = 'parcelado'
-              AND EXTRACT(YEAR  FROM data_vencimento) = $1
-              AND EXTRACT(MONTH FROM data_vencimento) = $2
-            ORDER BY data_vencimento
-        """, ano, mes)
-    return [dict(r) for r in rows]
+              AND data_vencimento IS NOT NULL
+        """)
+
+    resultado = []
+    for row in rows:
+        expanded = _expand_transacao(dict(row))
+        for item in expanded:
+            v = item["vencimento_parcela"]
+            if v.year == ano and v.month == mes:
+                resultado.append(item)
+
+    return resultado
+
+
+# ─── Helpers ───────────────────────────────────────────────────────────────────
+
+def _date_in_month(d, ano: int, mes: int) -> bool:
+    if d is None:
+        return False
+    if isinstance(d, str):
+        d = date.fromisoformat(d)
+    return d.year == ano and d.month == mes

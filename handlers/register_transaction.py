@@ -34,7 +34,7 @@ def parse_date_to_iso(date_text: str):
         return None
     for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
         try:
-            return datetime.strptime(text, fmt).date().isoformat()
+            return datetime.strptime(text, fmt).date()
         except ValueError:
             continue
     return "INVALID"

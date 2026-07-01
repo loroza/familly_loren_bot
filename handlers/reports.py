@@ -26,15 +26,25 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     mes_nome = MESES_PT[data["mes"]]
     ano = data["ano"]
 
+    saldo_anterior = data.get("saldo_anterior", 0.0)
+    saldo_mes = data["sobra"]
+    saldo_total = saldo_anterior + saldo_mes
+
     linhas = []
     linhas.append(f"📊 *RESUMO FINANCEIRO{titulo_extra}*")
     linhas.append(f"📅 {mes_nome.upper()}/{ano}")
     linhas.append("")
 
-    saldo = data["sobra"]
-    emoji_saldo = "🟢" if saldo >= 0 else "🔴"
-    linhas.append(f"{emoji_saldo} *SALDO DO MÊS*")
-    linhas.append(f"`{fmt(saldo)}`")
+    # Saldo acumulado
+    if saldo_anterior != 0.0:
+        emoji_ant = "🟢" if saldo_anterior >= 0 else "🔴"
+        linhas.append(f"{emoji_ant} *Saldo Anterior:* `{fmt(saldo_anterior)}`")
+
+    emoji_mes = "🟢" if saldo_mes >= 0 else "🔴"
+    linhas.append(f"{emoji_mes} *Gerado no Mês:* `{fmt(saldo_mes)}`")
+
+    emoji_total = "🟢" if saldo_total >= 0 else "🔴"
+    linhas.append(f"{emoji_total} *SALDO ACUMULADO:* `{fmt(saldo_total)}`")
     linhas.append("")
 
     # Entradas
@@ -90,11 +100,11 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
             )
         linhas.append("")
 
-    linhas.append("⚖️ *SOBRA LÍQUIDA*")
-    linhas.append(f"`{fmt(saldo)}`")
+    linhas.append("⚖️ *SOBRA LÍQUIDA DO MÊS*")
+    linhas.append(f"`{fmt(saldo_mes)}`")
     linhas.append("")
 
-    insights = _generate_insights(data)
+    insights = _generate_insights(data, saldo_total)
     if insights:
         linhas.append("💡 *INSIGHTS*")
         for i in insights:
@@ -103,7 +113,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     return "\n".join(linhas)
 
 
-def _generate_insights(data: dict) -> list[str]:
+def _generate_insights(data: dict, saldo_total: float = None) -> list[str]:
     insights = []
 
     if data["total_receitas"] == 0:
@@ -130,7 +140,9 @@ def _generate_insights(data: dict) -> list[str]:
         maior_cat = max(todos_grupos, key=todos_grupos.get)
         insights.append(f"📌 Maior gasto: *{maior_cat.title()}* com `{fmt(todos_grupos[maior_cat])}`.")
 
-    if data["sobra"] < 0:
+    if saldo_total is not None and saldo_total < 0:
+        insights.append(f"🔴 Saldo acumulado negativo de `{fmt(abs(saldo_total))}`. Atenção!")
+    elif data["sobra"] < 0:
         insights.append(f"🔴 Saldo negativo de `{fmt(abs(data['sobra']))}`. Atenção!")
 
     return insights
@@ -157,8 +169,12 @@ async def report_current_month(message: Message):
     hoje = date.today()
     user_id = str(message.from_user.id)
     await message.answer("⏳ Gerando relatório...")
-    data = await database.get_monthly_summary(user_id, hoje.year, hoje.month)
-    texto = build_monthly_report(data)
+
+    summary = await database.get_monthly_summary(user_id, hoje.year, hoje.month)
+    anterior = await database.get_previous_balance(user_id, hoje.year, hoje.month)
+    summary["saldo_anterior"] = anterior
+
+    texto = build_monthly_report(summary)
     await message.answer(
         texto,
         parse_mode="Markdown",
@@ -184,9 +200,12 @@ async def report_monthly_control(message: Message):
         meses.add((ano, mes))
 
     for ano, mes in sorted(meses):
-        data = await database.get_monthly_summary(user_id, ano, mes)
+        summary = await database.get_monthly_summary(user_id, ano, mes)
+        anterior = await database.get_previous_balance(user_id, ano, mes)
+        summary["saldo_anterior"] = anterior
+
         titulo = " — PREVISTO" if (ano > hoje.year or (ano == hoje.year and mes > hoje.month)) else ""
-        texto = build_monthly_report(data, titulo_extra=titulo)
+        texto = build_monthly_report(summary, titulo_extra=titulo)
         await message.answer(
             texto,
             parse_mode="Markdown",

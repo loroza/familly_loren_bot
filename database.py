@@ -262,3 +262,19 @@ async def get_installments_for_month(ano: int, mes: int) -> list[dict]:
                 resultado.append(item)
 
     return resultado
+
+async def get_previous_balance(user_id: str, year: int, month: int) -> float:
+    """Calcula a soma de todas as receitas menos despesas de meses anteriores."""
+    query = """
+        SELECT 
+            COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END), 0) -
+            COALESCE(SUM(CASE WHEN tipo = 'despesa' THEN 
+                CASE WHEN escopo = 'ambos' THEN valor * 0.5 ELSE valor END
+            ELSE 0 END), 0) as saldo_anterior
+        FROM transacoes
+        WHERE telegram_user_id = $1
+          AND (ano < $2 OR (ano = $2 AND mes < $3))
+    """
+    async with db_pool.acquire() as conn:
+        row = await conn.fetchrow(query, user_id, year, month)
+        return float(row['saldo_anterior'])

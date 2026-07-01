@@ -86,7 +86,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
             val_parcela = p.get("valor_parcela", 0)
             linhas.append(
-                f"  {escopo_icon} ({num}/{total_p}) {desc.title()}\n      Vencimento: {venc_str} — `{fmt(val_parcela)}`"
+                f"  {escopo_icon} ({num}/{total_p}) {desc.title()}\n        Vencimento: {venc_str} — `{fmt(val_parcela)}`"
             )
         linhas.append("")
 

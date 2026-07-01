@@ -264,7 +264,8 @@ async def get_installments_for_month(ano: int, mes: int) -> list[dict]:
     return resultado
 
 async def get_previous_balance(user_id: str, year: int, month: int) -> float:
-    """Calcula a soma de todas as receitas menos despesas de meses anteriores."""
+    """Calcula a soma de todas as receitas menos despesas (com regra 50/50) de meses anteriores."""
+    # Nota: usamos EXTRACT porque o banco armazena objetos DATE
     query = """
         SELECT 
             COALESCE(SUM(CASE WHEN tipo = 'receita' THEN valor ELSE 0 END), 0) -
@@ -273,8 +274,14 @@ async def get_previous_balance(user_id: str, year: int, month: int) -> float:
             ELSE 0 END), 0) as saldo_anterior
         FROM transacoes
         WHERE telegram_user_id = $1
-          AND (ano < $2 OR (ano = $2 AND mes < $3))
+          AND (
+            EXTRACT(YEAR FROM data_transacao) < $2 
+            OR (EXTRACT(YEAR FROM data_transacao) = $2 AND EXTRACT(MONTH FROM data_transacao) < $3)
+          )
     """
-    async with db_pool.acquire() as conn:
-        row = await conn.fetchrow(query, user_id, year, month)
-        return float(row['saldo_anterior'])
+    if pool is None:
+        await init_db_pool()
+        
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(query, str(user_id), int(year), int(month))
+        return float(row['saldo_anterior'] or 0.0)

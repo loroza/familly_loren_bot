@@ -225,38 +225,84 @@ async def show_detail(callback: CallbackQuery):
 
     linhas = [f"🔍 *LANÇAMENTOS — {mes_nome.upper()}/{ano}*", ""]
 
-    todas = data["desp_pessoal"] + data["desp_ambos"] + data["receitas"]
+    # 1. Preparar listas unificadas com data de exibição tratada
+    receitas = data["receitas"]
+    # Unifica despesas pessoais e compartilhadas
+    despesas = data["desp_pessoal"] + data["desp_ambos"]
 
-    if not todas:
-        linhas.append("_Nenhum lançamento encontrado._")
-    else:
-        grupos: dict[str, list] = {}
-        for r in todas:
-            cat = r.get("categoria_text") or "Outros"
-            grupos.setdefault(cat, []).append(r)
+    if not receitas and not despesas:
+        await callback.message.answer("_Nenhum lançamento encontrado para este período._", parse_mode="Markdown")
+        await callback.answer()
+        return
 
-        for cat, items in sorted(grupos.items()):
-            linhas.append(f"📂 *{cat.title()}*")
-            for item in items:
-                desc = item.get("descricao") or item.get("subcategoria_text") or "-"
-                val = item.get("valor_parcela") or float(item.get("valor", 0))
-                escopo = item.get("escopo", "")
-                tipo_pag = item.get("tipo_pagamento", "")
-                num = item.get("numero_parcela")
-                total_p = item.get("parcelas_total")
-                venc = item.get("vencimento_parcela") or _to_date(item.get("data_transacao"))
-                venc_str = venc.strftime("%d/%m") if venc else "-"
+    # 2. Processar Receitas
+    if receitas:
+        linhas.append("📈 *RECEITAS*")
+        linhas.extend(_format_group_hierarchy(receitas))
+        linhas.append("")
 
-                escopo_icon = "🏠" if escopo == "ambos" else "👤"
-                parcela_str = f" {num}/{total_p}" if tipo_pag == "parcelado" and num else ""
+    # 3. Processar Despesas
+    if despesas:
+        linhas.append("📉 *DESPESAS*")
+        linhas.extend(_format_group_hierarchy(despesas))
 
-                linhas.append(
-                    f"  {escopo_icon} {venc_str} • {desc.title()}{parcela_str} — `{fmt(val)}`"
-                )
-            linhas.append("")
+    # Telegram tem limite de 4096 caracteres. Se o relatório for gigante, 
+    # enviamos em partes ou cortamos. Aqui enviamos como uma mensagem.
+    texto_final = "\n".join(linhas)
+    if len(texto_final) > 4000:
+        texto_final = texto_final[:3900] + "\n\n...(Relatório muito longo, exibindo apenas o início)"
 
-    await callback.message.answer("\n".join(linhas), parse_mode="Markdown")
+    await callback.message.answer(texto_final, parse_mode="Markdown")
     await callback.answer()
+
+def _format_group_hierarchy(items_list: list) -> list[str]:
+    """Auxiliar para agrupar por Data > Categoria e formatar as linhas."""
+    # Ordenar por data
+    def get_date(item):
+        d = item.get("vencimento_parcela") or item.get("data_transacao")
+        return _to_date(d) or date(1970, 1, 1)
+
+    sorted_items = sorted(items_list, key=get_date)
+    
+    output = []
+    current_date = None
+    
+    # Agrupamento manual para manter ordem cronológica
+    for item in sorted_items:
+        item_date = get_date(item)
+        date_str = item_date.strftime("%d/%m/%Y")
+        
+        # Nível 1: Data
+        if date_str != current_date:
+            output.append(f"\n📅 *{date_str}*")
+            current_date = date_str
+            last_cat = None
+
+        # Nível 2: Categoria
+        cat = (item.get("categoria_text") or "Outros").title()
+        if cat != last_cat:
+            output.append(f"  📂 *{cat}*")
+            last_cat = cat
+
+        # Nível 3: Lançamento
+        desc = (item.get("descricao") or item.get("subcategoria_text") or "-").title()
+        val = item.get("valor_parcela") or float(item.get("valor", 0))
+        escopo = item.get("escopo", "")
+        tipo_pag = item.get("tipo_pagamento", "")
+        
+        # Ícone de escopo
+        escopo_icon = "🏠" if escopo == "ambos" else "👤"
+        
+        # Info de parcela
+        parcela_str = ""
+        if tipo_pag == "parcelado":
+            num = item.get("numero_parcela")
+            tot = item.get("parcelas_total")
+            parcela_str = f" ({num}/{tot})"
+
+        output.append(f"     {escopo_icon} {parcela_str} {desc}\n          `{fmt(val)}`")
+
+    return output
 
 
 def _to_date(value):

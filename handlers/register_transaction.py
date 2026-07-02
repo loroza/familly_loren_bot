@@ -28,15 +28,21 @@ class TransactionState(StatesGroup):
     waiting_for_installments = State()
 
 
-def parse_date_to_iso(date_text: str):
+def parse_date_to_iso(date_text: str, use_today_on_dot: bool = False):
     text = (date_text or "").strip()
-    if text in [".", "-", ""]:
+
+    if text == ".":
+        return datetime.today().date() if use_today_on_dot else None
+
+    if text in ["-", ""]:
         return None
+
     for fmt in ("%d/%m/%Y", "%Y-%m-%d"):
         try:
             return datetime.strptime(text, fmt).date()
         except ValueError:
             continue
+
     return "INVALID"
 
 
@@ -79,8 +85,8 @@ async def save_transaction(message: Message, state: FSMContext):
         await database.insert_transacao(payload)
 
         parcelas_texto = str(payload["parcelas_total"]) if payload["parcelas_total"] is not None else "-"
-        data_transacao_texto = payload["data_transacao"] or "-"
-        data_vencimento_texto = payload["data_vencimento"] or "-"
+        data_transacao_texto = str(payload["data_transacao"]) if payload["data_transacao"] else "-"
+        data_vencimento_texto = str(payload["data_vencimento"]) if payload["data_vencimento"] else "-"
 
         await message.answer(
             f"✅ Registrado com sucesso!\n\n"
@@ -194,7 +200,7 @@ async def enter_amount(message: Message, state: FSMContext):
         await message.answer(
             "Digite a data da transação.\n"
             "Formato: DD/MM/AAAA ou AAAA-MM-DD\n"
-            "Envie '.' para deixar em branco."
+            "Envie '.' para usar a data de hoje."
         )
     except ValueError:
         await message.answer("❌ Valor inválido. Digite apenas números. Ex: 150.50")
@@ -202,10 +208,10 @@ async def enter_amount(message: Message, state: FSMContext):
 
 @router.message(StateFilter(TransactionState.waiting_for_transaction_date))
 async def enter_transaction_date(message: Message, state: FSMContext):
-    data_transacao = parse_date_to_iso(message.text)
+    data_transacao = parse_date_to_iso(message.text, use_today_on_dot=True)
     if data_transacao == "INVALID":
         await message.answer(
-            "❌ Data inválida.\nUse DD/MM/AAAA ou AAAA-MM-DD.\nOu envie '.' para pular."
+            "❌ Data inválida.\nUse DD/MM/AAAA ou AAAA-MM-DD.\nOu envie '.' para usar a data de hoje."
         )
         return
 

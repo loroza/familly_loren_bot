@@ -256,8 +256,9 @@ async def show_detail(callback: CallbackQuery):
     await callback.answer()
 
 def _format_group_hierarchy(items_list: list) -> list[str]:
-    """Auxiliar para agrupar por Data > Categoria e formatar as linhas."""
-    # Ordenar por data
+    """Auxiliar para agrupar por Data > Categoria (sem repetições) e formatar as linhas."""
+    
+    # 1. Ordenar por data
     def get_date(item):
         d = item.get("vencimento_parcela") or item.get("data_transacao")
         return _to_date(d) or date(1970, 1, 1)
@@ -265,42 +266,43 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
     sorted_items = sorted(items_list, key=get_date)
     
     output = []
-    current_date = None
     
-    # Agrupamento manual para manter ordem cronológica
+    # 2. Primeiro Passo: Agrupar por data e depois por categoria
+    # Estrutura: { "01/07/2026": { "🍕 Alimentação": [item1, item2], "🚗 Transporte": [item3] } }
+    grouped = {}
     for item in sorted_items:
-        item_date = get_date(item)
-        date_str = item_date.strftime("%d/%m/%Y")
-        
-        # Nível 1: Data
-        if date_str != current_date:
-            output.append(f"\n📅 *{date_str}*")
-            current_date = date_str
-            last_cat = None
-
-        # Nível 2: Categoria
+        date_str = get_date(item).strftime("%d/%m/%Y")
         cat = (item.get("categoria_text") or "Outros").title()
-        if cat != last_cat:
+        
+        if date_str not in grouped:
+            grouped[date_str] = {}
+        if cat not in grouped[date_str]:
+            grouped[date_str][cat] = []
+            
+        grouped[date_str][cat].append(item)
+
+    # 3. Segundo Passo: Construir o texto a partir do dicionário agrupado
+    for date_str, categories in grouped.items():
+        output.append(f"\n📅 *{date_str}*")
+        
+        for cat, items in categories.items():
             output.append(f"\n  📂 *{cat}*")
-            last_cat = cat
+            
+            for item in items:
+                desc = (item.get("descricao") or item.get("subcategoria_text") or "-").title()
+                val = item.get("valor_parcela") or float(item.get("valor", 0))
+                escopo = item.get("escopo", "")
+                tipo_pag = item.get("tipo_pagamento", "")
+                
+                escopo_icon = "🏠" if escopo == "ambos" else "👤"
+                
+                parcela_str = ""
+                if tipo_pag == "parcelado":
+                    num = item.get("numero_parcela")
+                    tot = item.get("parcelas_total")
+                    parcela_str = f"({num}/{tot}) "
 
-        # Nível 3: Lançamento
-        desc = (item.get("descricao") or item.get("subcategoria_text") or "-").title()
-        val = item.get("valor_parcela") or float(item.get("valor", 0))
-        escopo = item.get("escopo", "")
-        tipo_pag = item.get("tipo_pagamento", "")
-        
-        # Ícone de escopo
-        escopo_icon = "🏠" if escopo == "ambos" else "👤"
-        
-        # Info de parcela
-        parcela_str = ""
-        if tipo_pag == "parcelado":
-            num = item.get("numero_parcela")
-            tot = item.get("parcelas_total")
-            parcela_str = f" ({num}/{tot})"
-
-        output.append(f"     {escopo_icon} {parcela_str} {desc}\n            `{fmt(val)}`")
+                output.append(f"     {escopo_icon} {parcela_str}{desc}\n            `{fmt(val)}`")
 
     return output
 

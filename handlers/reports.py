@@ -80,30 +80,6 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         linhas.append(f"  Sua parte: `{fmt(data['total_ambos'] * 0.5)}`")
         linhas.append("")
 
-    # Parcelas do mês
-    parcelados = [
-        r for r in (data["desp_pessoal"] + data["desp_ambos"])
-        if (r.get("tipo_pagamento") or "unico") == "parcelado"
-    ]
-    if parcelados:
-        linhas.append("💳 *PARCELAS DO MÊS*")
-        for p in parcelados:
-            desc = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
-            num = p.get("numero_parcela", 1)
-            total_p = p.get("parcelas_total", 1)
-            venc = p.get("vencimento_parcela")
-            venc_str = venc.strftime("%d/%m") if venc else "-"
-            escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
-            val_parcela = p.get("valor_parcela", 0)
-            linhas.append(
-                f"  {escopo_icon} ({num}/{total_p}) {desc.title()}\n        Vencimento: {venc_str} — `{fmt(val_parcela)}`"
-            )
-        linhas.append("")
-
-    linhas.append("⚖️ *SOBRA LÍQUIDA DO MÊS*")
-    linhas.append(f"`{fmt(saldo_mes)}`")
-    linhas.append("")
-
     insights = _generate_insights(data, saldo_total)
     if insights:
         linhas.append("💡 *INSIGHTS*")

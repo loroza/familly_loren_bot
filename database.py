@@ -81,7 +81,7 @@ async def update_transacao_to_realizado(transacao_id: int, data_pagamento: str):
         await conn.execute("""
             UPDATE transacoes
             SET status = 'realizado',
-                data_pagamento = $1
+                data_pagamento = CAST($1 AS DATE)
             WHERE id = $2
         """, data_pagamento, transacao_id)
 

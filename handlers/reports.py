@@ -492,7 +492,7 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
 
             for item in items:
                 subcat = item.get("subcategoria_text")
-                desc = (item.get("descricao") or subcat or "-").title()
+                desc = (item.get("descricao") or subcat or "-")
                 valor = item.get("valor_parcela") or float(item.get("valor", 0))
                 escopo = item.get("escopo", "")
                 tipo_pagamento = item.get("tipo_pagamento", "")
@@ -507,9 +507,7 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
                     parcela_str = f"({numero}/{total}) "
 
                 output.append(
-                    f"     {subcat}\n"
-                    f"          {escopo_icon} {parcela_str}{desc}\n"
-                    f"            `{fmt(valor)}`"
+                    f"          {escopo_icon} `{fmt(valor)}` → {parcela_str}{desc}\n"
                 )
 
     return output

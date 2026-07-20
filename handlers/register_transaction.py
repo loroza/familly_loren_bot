@@ -120,7 +120,7 @@ async def save_transaction(message: Message, state: FSMContext):
                 f"📦 Tipo de pagamento: {payload['tipo_pagamento'] or '-'}\n"
                 f"🔢 Parcelas: {parcelas_texto}\n"
                 f"📌 Status: {status_texto}\n"
-                f"💵 Data de pagamento: {data_pagamento_texto}",
+                f"💵 Data de pagamento: {data_pagamento_texto}"
             )
 
             for user_id in authorized_ids:

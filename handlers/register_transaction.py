@@ -104,6 +104,32 @@ async def save_transaction(message: Message, state: FSMContext):
         status_texto = "✅ Realizado" if payload["status"] == "realizado" else "⏳ Previsto"
         data_pagamento_texto = str(payload["data_pagamento"]) if payload["data_pagamento"] else "-"
 
+        if payload["escopo"] == "ambos":
+            authorized_ids = await database.get_all_authorized_users()
+            dt_str = payload['data_transacao'].strftime('%d/%m/%Y') if payload['data_transacao'] else "-"
+
+            msg_familia = (
+                f"✅ Registrado com sucesso!\n\n"
+                f"📂 {payload['categoria_text']} › {payload['subcategoria_text']}\n"
+                f"💰 R$ {payload['valor']:.2f}\n"
+                f"🔖 Escopo: {payload['escopo']}\n"
+                f"📝 Descrição: {payload['descricao'] or '-'}\n"
+                f"📅 Data da transação: {data_transacao_texto}\n"
+                f"🗓️ Data de vencimento: {data_vencimento_texto}\n"
+                f"💳 Forma de pagamento: {payload['forma_pagamento'] or '-'}\n"
+                f"📦 Tipo de pagamento: {payload['tipo_pagamento'] or '-'}\n"
+                f"🔢 Parcelas: {parcelas_texto}\n"
+                f"📌 Status: {status_texto}\n"
+                f"💵 Data de pagamento: {data_pagamento_texto}",
+            )
+
+            for user_id in authorized_ids:
+                if str(user_id) != str(message.from_user.id):
+                    try:
+                        await message.bot.send_message(user_id, msg_familia, parse_mode="Markdown")
+                    except Exception as e:
+                        logger.error(f"Erro ao notificar {user_id}: {e}")
+
         await message.answer(
             f"✅ Registrado com sucesso!\n\n"
             f"📂 {payload['categoria_text']} › {payload['subcategoria_text']}\n"

@@ -260,3 +260,10 @@ async def get_months_with_installments():
             if venc >= hoje:
                 meses.add((venc.year, venc.month))
     return sorted(meses)
+
+
+async def get_all_authorized_users() -> list[str]:
+    """Retorna lista de telegram_ids autorizados."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT telegram_id FROM usuarios WHERE authorized = TRUE")
+        return [row['telegram_id'] for row in rows]

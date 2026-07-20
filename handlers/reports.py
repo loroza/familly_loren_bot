@@ -352,10 +352,10 @@ async def realizar_pagamento(callback: CallbackQuery):
     await callback.answer()
 
 
+# Modifique apenas a parte de formatar a hierarquia no handlers/reports.py
 def _format_group_hierarchy(items_list: list) -> list[str]:
     def get_date(item):
-        d = item.get("vencimento_parcela") or item.get("data_transacao")
-        return _to_date(d) or date(1970, 1, 1)
+        return item.get("data_vencimento") or item.get("data_transacao") or date(1970,1,1)
 
     sorted_items = sorted(items_list, key=get_date)
     output = []
@@ -364,39 +364,21 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
     for item in sorted_items:
         date_str = get_date(item).strftime("%d/%m/%Y")
         cat = (item.get("categoria_text") or "Outros").title()
-
-        if date_str not in grouped:
-            grouped[date_str] = {}
-        if cat not in grouped[date_str]:
-            grouped[date_str][cat] = []
-
+        if date_str not in grouped: grouped[date_str] = {}
+        if cat not in grouped[date_str]: grouped[date_str][cat] = []
         grouped[date_str][cat].append(item)
 
     for date_str, categories in grouped.items():
         output.append(f"\n📅 *{date_str}*")
-
         for cat, items in categories.items():
             output.append(f"\n  📂 *{cat}*")
-
             for item in items:
-                subcat = item.get("subcategoria_text")
-                desc = (item.get("descricao") or subcat or "-").title()
-                val = item.get("valor_parcela") or float(item.get("valor", 0))
-                escopo = item.get("escopo", "")
-                tipo_pag = item.get("tipo_pagamento", "")
-
-                escopo_icon = "🏠" if escopo == "ambos" else "👤"
-
-                parcela_str = ""
-                if tipo_pag == "parcelado":
-                    num = item.get("numero_parcela")
-                    tot = item.get("parcelas_total")
-                    parcela_str = f"({num}/{tot}) "
-
-                output.append(
-                    f"          {escopo_icon} `{fmt(val)}` ► {parcela_str}{desc}"
-                )
-
+                desc = (item.get("descricao") or item.get("subcategoria_text") or "-").title()
+                val = float(item.get("valor", 0))
+                escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
+                status_icon = "⏳" if item.get("status") == "previsto" else ""
+                
+                output.append(f"          {escopo_icon} `{fmt(val)}` ► {status_icon}{desc}")
     return output
 
 

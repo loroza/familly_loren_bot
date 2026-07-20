@@ -216,20 +216,30 @@ async def select_report_month(message: Message, state: FSMContext):
 
     if texto == "⬅️ Voltar":
         await state.clear()
-
         await message.answer(
             "Menu de relatórios:",
             reply_markup=keyboards.report_menu_keyboard()
         )
         return
 
-    try:
-        mes = int(texto.split("-")[0].strip())
+    meses_por_nome = {
+        "Janeiro": 1,
+        "Fevereiro": 2,
+        "Março": 3,
+        "Abril": 4,
+        "Maio": 5,
+        "Junho": 6,
+        "Julho": 7,
+        "Agosto": 8,
+        "Setembro": 9,
+        "Outubro": 10,
+        "Novembro": 11,
+        "Dezembro": 12,
+    }
 
-        if mes < 1 or mes > 12:
-            raise ValueError
+    mes = meses_por_nome.get(texto)
 
-    except (ValueError, IndexError):
+    if mes is None:
         await message.answer(
             "❌ Escolha um mês usando o teclado.",
             reply_markup=keyboards.report_month_keyboard()

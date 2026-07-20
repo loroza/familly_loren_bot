@@ -5,6 +5,8 @@ from datetime import date
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from aiogram.filters import StateFilter
 
 import database
 import keyboards
@@ -13,9 +15,25 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 MESES_PT = [
-    "", "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-    "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"
+    "",
+    "Janeiro",
+    "Fevereiro",
+    "Março",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro"
 ]
+
+
+class ReportState(StatesGroup):
+    waiting_for_month = State()
+    waiting_for_year = State()
 
 
 def fmt(valor: float) -> str:
@@ -31,11 +49,11 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     saldo_total = saldo_anterior + saldo_mes
 
     linhas = []
+
     linhas.append(f"📊 *RESUMO FINANCEIRO{titulo_extra}*")
     linhas.append(f"📅 {mes_nome.upper()}/{ano}")
     linhas.append("")
 
-    # Saldo acumulado
     if saldo_anterior != 0.0:
         emoji_ant = "🟢" if saldo_anterior >= 0 else "🔴"
         linhas.append(f"{emoji_ant} *Saldo Anterior:* `{fmt(saldo_anterior)}`")
@@ -47,18 +65,25 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     linhas.append(f"{emoji_total} *SALDO ACUMULADO:* `{fmt(saldo_total)}`")
     linhas.append("")
 
-    # Entradas
     linhas.append("📈 *ENTRADAS*")
     linhas.append(f"`{fmt(data['total_receitas'])}`")
+
     if data["grupos_receitas"]:
-        for cat, val in sorted(data["grupos_receitas"].items(), key=lambda x: -x[1]):
-            pct = (val / data["total_receitas"] * 100) if data["total_receitas"] > 0 else 0
+        for cat, val in sorted(
+            data["grupos_receitas"].items(),
+            key=lambda x: -x[1]
+        ):
+            pct = (
+                val / data["total_receitas"] * 100
+                if data["total_receitas"] > 0
+                else 0
+            )
             linhas.append(f"  • {cat.title()}: `{fmt(val)}` _{pct:.0f}%_")
     else:
         linhas.append("  _Nenhuma receita registrada_")
+
     linhas.append("")
 
-    # Saídas
     linhas.append("📉 *SAÍDAS*")
     linhas.append(f"Total lançado: `{fmt(data['total_lancado'])}`")
     linhas.append(f"Seu custo real: `{fmt(data['meu_custo_real'])}`")
@@ -66,25 +91,45 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
 
     if data["grupos_pessoal"]:
         linhas.append("👤 *Pessoais*")
-        for cat, val in sorted(data["grupos_pessoal"].items(), key=lambda x: -x[1]):
-            pct = (val / data["total_pessoal"] * 100) if data["total_pessoal"] > 0 else 0
+
+        for cat, val in sorted(
+            data["grupos_pessoal"].items(),
+            key=lambda x: -x[1]
+        ):
+            pct = (
+                val / data["total_pessoal"] * 100
+                if data["total_pessoal"] > 0
+                else 0
+            )
             linhas.append(f"  • {cat.title()}: `{fmt(val)}` _{pct:.0f}%_")
+
         linhas.append("")
 
     if data["grupos_ambos"]:
         linhas.append("🏠 *Compartilhadas* _(50% do total)_")
-        for cat, val in sorted(data["grupos_ambos"].items(), key=lambda x: -x[1]):
-            pct = (val / data["total_ambos"] * 100) if data["total_ambos"] > 0 else 0
+
+        for cat, val in sorted(
+            data["grupos_ambos"].items(),
+            key=lambda x: -x[1]
+        ):
+            pct = (
+                val / data["total_ambos"] * 100
+                if data["total_ambos"] > 0
+                else 0
+            )
             linhas.append(f"  • {cat.title()}: `{fmt(val)}` _{pct:.0f}%_")
+
         linhas.append(f"  Total casal: `{fmt(data['total_ambos'])}`")
         linhas.append(f"  Sua parte: `{fmt(data['total_ambos'] * 0.5)}`")
         linhas.append("")
 
     insights = _generate_insights(data, saldo_total)
+
     if insights:
         linhas.append("💡 *INSIGHTS*")
-        for i in insights:
-            linhas.append(i)
+
+        for insight in insights:
+            linhas.append(insight)
 
     return "\n".join(linhas)
 
@@ -100,61 +145,208 @@ def _generate_insights(data: dict, saldo_total: float = None) -> list[str]:
         return insights
 
     if data["total_receitas"] > 0:
-        comprometimento = (data["meu_custo_real"] / data["total_receitas"]) * 100
+        comprometimento = (
+            data["meu_custo_real"] / data["total_receitas"]
+        ) * 100
+
         if comprometimento >= 90:
-            insights.append(f"🔴 {comprometimento:.0f}% da sua renda está comprometida.")
+            insights.append(
+                f"🔴 {comprometimento:.0f}% da sua renda está comprometida."
+            )
         elif comprometimento >= 70:
-            insights.append(f"⚠️ {comprometimento:.0f}% da sua renda está comprometida.")
+            insights.append(
+                f"⚠️ {comprometimento:.0f}% da sua renda está comprometida."
+            )
         else:
-            insights.append(f"✅ {comprometimento:.0f}% da sua renda comprometida. Bom controle!")
+            insights.append(
+                f"✅ {comprometimento:.0f}% da sua renda comprometida. Bom controle!"
+            )
 
     todos_grupos = {**data["grupos_pessoal"]}
+
     for cat, val in data["grupos_ambos"].items():
         todos_grupos[cat] = todos_grupos.get(cat, 0) + val * 0.5
 
     if todos_grupos:
         maior_cat = max(todos_grupos, key=todos_grupos.get)
-        insights.append(f"📌 Maior gasto: *{maior_cat.title()}* com `{fmt(todos_grupos[maior_cat])}`.")
+
+        insights.append(
+            f"📌 Maior gasto: *{maior_cat.title()}* com "
+            f"`{fmt(todos_grupos[maior_cat])}`."
+        )
 
     if saldo_total is not None and saldo_total < 0:
-        insights.append(f"🔴 Saldo acumulado negativo de `{fmt(abs(saldo_total))}`. Atenção!")
+        insights.append(
+            f"🔴 Saldo acumulado negativo de `{fmt(abs(saldo_total))}`. Atenção!"
+        )
     elif data["sobra"] < 0:
-        insights.append(f"🔴 Saldo negativo de `{fmt(abs(data['sobra']))}`. Atenção!")
+        insights.append(
+            f"🔴 Saldo negativo de `{fmt(abs(data['sobra']))}`. Atenção!"
+        )
 
     return insights
 
 
-# ─── Handlers ────
+# ─── Menu de Relatórios ───
 
 @router.message(F.text == "📊 Meu Relatório")
-async def open_report_menu(message: Message):
+async def open_report_menu(message: Message, state: FSMContext):
+    await state.clear()
+
     await message.answer(
         "Escolha o tipo de relatório:",
         reply_markup=keyboards.report_menu_keyboard()
     )
 
 
+@router.message(F.text == "📅 Mensal")
+async def start_monthly_report(message: Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(ReportState.waiting_for_month)
+
+    await message.answer(
+        "📅 Selecione o mês do relatório:",
+        reply_markup=keyboards.report_month_keyboard()
+    )
+
+
+@router.message(StateFilter(ReportState.waiting_for_month))
+async def select_report_month(message: Message, state: FSMContext):
+    texto = (message.text or "").strip()
+
+    if texto == "⬅️ Voltar":
+        await state.clear()
+
+        await message.answer(
+            "Menu de relatórios:",
+            reply_markup=keyboards.report_menu_keyboard()
+        )
+        return
+
+    try:
+        mes = int(texto.split("-")[0].strip())
+
+        if mes < 1 or mes > 12:
+            raise ValueError
+
+    except (ValueError, IndexError):
+        await message.answer(
+            "❌ Escolha um mês usando o teclado.",
+            reply_markup=keyboards.report_month_keyboard()
+        )
+        return
+
+    await state.update_data(mes=mes)
+    await state.set_state(ReportState.waiting_for_year)
+
+    await message.answer(
+        f"Você escolheu *{MESES_PT[mes]}*.\n\n"
+        "Agora informe o ano.\n"
+        "Exemplo: `2026`",
+        parse_mode="Markdown"
+    )
+
+
+@router.message(StateFilter(ReportState.waiting_for_year))
+async def select_report_year(message: Message, state: FSMContext):
+    texto = (message.text or "").strip()
+
+    if texto == "⬅️ Voltar":
+        await state.set_state(ReportState.waiting_for_month)
+
+        await message.answer(
+            "📅 Selecione o mês do relatório:",
+            reply_markup=keyboards.report_month_keyboard()
+        )
+        return
+
+    try:
+        ano = int(texto)
+
+        if ano < 2000 or ano > 2100:
+            raise ValueError
+
+    except ValueError:
+        await message.answer(
+            "❌ Ano inválido. Informe um ano com quatro dígitos.\n"
+            "Exemplo: `2026`",
+            parse_mode="Markdown"
+        )
+        return
+
+    dados = await state.get_data()
+    mes = dados["mes"]
+    user_id = str(message.from_user.id)
+
+    await message.answer(
+        f"⏳ Gerando relatório de *{MESES_PT[mes]} de {ano}*...",
+        parse_mode="Markdown"
+    )
+
+    summary = await database.get_monthly_summary(user_id, ano, mes)
+    saldo_anterior = await database.get_previous_balance(user_id, ano, mes)
+
+    summary["saldo_anterior"] = saldo_anterior
+
+    texto_relatorio = build_monthly_report(summary)
+
+    await message.answer(
+        texto_relatorio,
+        parse_mode="Markdown",
+        reply_markup=keyboards.detail_inline_keyboard(
+            ano,
+            mes,
+            message.from_user.id
+        )
+    )
+
+    await state.clear()
+
+
 @router.message(F.text == "⬅️ Voltar")
 async def back_to_main(message: Message, state: FSMContext):
     await state.clear()
-    await message.answer("Menu principal:", reply_markup=keyboards.main_menu_keyboard())
 
+    await message.answer(
+        "Menu principal:",
+        reply_markup=keyboards.main_menu_keyboard()
+    )
+
+
+# ─── Handlers antigos preservados ───
+# Eles continuam disponíveis no código, mas não aparecem mais no teclado atual.
 
 @router.message(F.text == "📅 Mês Atual")
 async def report_current_month(message: Message):
     hoje = date.today()
     user_id = str(message.from_user.id)
+
     await message.answer("⏳ Gerando relatório...")
 
-    summary = await database.get_monthly_summary(user_id, hoje.year, hoje.month)
-    anterior = await database.get_previous_balance(user_id, hoje.year, hoje.month)
+    summary = await database.get_monthly_summary(
+        user_id,
+        hoje.year,
+        hoje.month
+    )
+
+    anterior = await database.get_previous_balance(
+        user_id,
+        hoje.year,
+        hoje.month
+    )
+
     summary["saldo_anterior"] = anterior
 
     texto = build_monthly_report(summary)
+
     await message.answer(
         texto,
         parse_mode="Markdown",
-        reply_markup=keyboards.detail_inline_keyboard(hoje.year, hoje.month, message.from_user.id)
+        reply_markup=keyboards.detail_inline_keyboard(
+            hoje.year,
+            hoje.month,
+            message.from_user.id
+        )
     )
 
 
@@ -162,123 +354,153 @@ async def report_current_month(message: Message):
 async def report_monthly_control(message: Message):
     hoje = date.today()
     user_id = str(message.from_user.id)
+
     await message.answer("⏳ Gerando controle mensal...")
 
     meses_parcelas = await database.get_months_with_installments()
 
     meses = set()
+
     if hoje.month == 1:
         meses.add((hoje.year - 1, 12))
     else:
         meses.add((hoje.year, hoje.month - 1))
+
     meses.add((hoje.year, hoje.month))
+
     for ano, mes in meses_parcelas:
         meses.add((ano, mes))
 
     for ano, mes in sorted(meses):
         summary = await database.get_monthly_summary(user_id, ano, mes)
+
         anterior = await database.get_previous_balance(user_id, ano, mes)
         summary["saldo_anterior"] = anterior
 
-        titulo = " — PREVISTO" if (ano > hoje.year or (ano == hoje.year and mes > hoje.month)) else ""
+        titulo = ""
+
+        if ano > hoje.year or (ano == hoje.year and mes > hoje.month):
+            titulo = " — PREVISTO"
+
         texto = build_monthly_report(summary, titulo_extra=titulo)
+
         await message.answer(
             texto,
             parse_mode="Markdown",
-            reply_markup=keyboards.detail_inline_keyboard(ano, mes, message.from_user.id)
+            reply_markup=keyboards.detail_inline_keyboard(
+                ano,
+                mes,
+                message.from_user.id
+            )
         )
 
 
-# ─── Callback: Ver Lançamentos ────
+# ─── Callback: Ver Lançamentos ───
 
 @router.callback_query(F.data.startswith("detail:"))
 async def show_detail(callback: CallbackQuery):
     _, ano, mes, user_id = callback.data.split(":")
-    ano, mes = int(ano), int(mes)
 
-    data = await database.get_monthly_summary(str(user_id), ano, mes)
+    ano = int(ano)
+    mes = int(mes)
+
+    data = await database.get_monthly_summary(
+        str(user_id),
+        ano,
+        mes
+    )
+
     mes_nome = MESES_PT[mes]
 
-    linhas = [f"🔍 *LANÇAMENTOS — {mes_nome.upper()}/{ano}*", ""]
+    linhas = [
+        f"🔍 *LANÇAMENTOS — {mes_nome.upper()}/{ano}*",
+        ""
+    ]
 
-    # 1. Preparar listas unificadas com data de exibição tratada
     receitas = data["receitas"]
-    # Unifica despesas pessoais e compartilhadas
     despesas = data["desp_pessoal"] + data["desp_ambos"]
 
     if not receitas and not despesas:
-        await callback.message.answer("_Nenhum lançamento encontrado para este período._", parse_mode="Markdown")
+        await callback.message.answer(
+            "_Nenhum lançamento encontrado para este período._",
+            parse_mode="Markdown"
+        )
         await callback.answer()
         return
 
-    # 2. Processar Receitas
     if receitas:
         linhas.append("📈 *RECEITAS*")
         linhas.extend(_format_group_hierarchy(receitas))
         linhas.append("")
 
-    # 3. Processar Despesas
     if despesas:
         linhas.append("📉 *DESPESAS*")
         linhas.extend(_format_group_hierarchy(despesas))
 
-    # Telegram tem limite de 4096 caracteres. Se o relatório for gigante, 
-    # enviamos em partes ou cortamos. Aqui enviamos como uma mensagem.
     texto_final = "\n".join(linhas)
-    if len(texto_final) > 4000:
-        texto_final = texto_final[:3900] + "\n\n...(Relatório muito longo, exibindo apenas o início)"
 
-    await callback.message.answer(texto_final, parse_mode="Markdown")
+    if len(texto_final) > 4000:
+        texto_final = (
+            texto_final[:3900]
+            + "\n\n...(Relatório muito longo, exibindo apenas o início)"
+        )
+
+    await callback.message.answer(
+        texto_final,
+        parse_mode="Markdown"
+    )
+
     await callback.answer()
 
+
 def _format_group_hierarchy(items_list: list) -> list[str]:
-    """Auxiliar para agrupar por Data > Categoria (sem repetições) e formatar as linhas."""
-    
-    # 1. Ordenar por data
     def get_date(item):
-        d = item.get("vencimento_parcela") or item.get("data_transacao")
-        return _to_date(d) or date(1970, 1, 1)
+        data_item = item.get("vencimento_parcela") or item.get("data_transacao")
+        return _to_date(data_item) or date(1970, 1, 1)
 
     sorted_items = sorted(items_list, key=get_date)
-    
     output = []
-    
-    # 2. Primeiro Passo: Agrupar por data e depois por categoria
-    # Estrutura: { "01/07/2026": { "🍕 Alimentação": [item1, item2], "🚗 Transporte": [item3] } }
     grouped = {}
+
     for item in sorted_items:
         date_str = get_date(item).strftime("%d/%m/%Y")
-        cat = (item.get("categoria_text") or "Outros").title()
-        
+        categoria = (item.get("categoria_text") or "Outros").title()
+
         if date_str not in grouped:
             grouped[date_str] = {}
-        if cat not in grouped[date_str]:
-            grouped[date_str][cat] = []
-            
-        grouped[date_str][cat].append(item)
 
-    # 3. Segundo Passo: Construir o texto a partir do dicionário agrupado
+        if categoria not in grouped[date_str]:
+            grouped[date_str][categoria] = []
+
+        grouped[date_str][categoria].append(item)
+
     for date_str, categories in grouped.items():
         output.append(f"\n📅 *{date_str}*")
-        
-        for cat, items in categories.items():
-            output.append(f"\n  📂 *{cat}*")
-            
-            for item in items:
-                desc = (item.get("descricao") or item.get("subcategoria_text") or "-").title()
-                val = item.get("valor_parcela") or float(item.get("valor", 0))
-                escopo = item.get("escopo", "")
-                tipo_pag = item.get("tipo_pagamento", "")
-                
-                escopo_icon = "🏠" if escopo == "ambos" else "👤"
-                
-                parcela_str = ""
-                if tipo_pag == "parcelado":
-                    num = item.get("numero_parcela")
-                    tot = item.get("parcelas_total")
-                    parcela_str = f"({num}/{tot}) "
 
-                output.append(f"     {escopo_icon} {parcela_str}{desc}\n            `{fmt(val)}`")
+        for categoria, items in categories.items():
+            output.append(f"\n  📂 *{categoria}*")
+
+            for item in items:
+                subcat = item.get("subcategoria_text")
+                desc = (item.get("descricao") or subcat or "-").title()
+                valor = item.get("valor_parcela") or float(item.get("valor", 0))
+                escopo = item.get("escopo", "")
+                tipo_pagamento = item.get("tipo_pagamento", "")
+
+                escopo_icon = "🏠" if escopo == "ambos" else "👤"
+
+                parcela_str = ""
+
+                if tipo_pagamento == "parcelado":
+                    numero = item.get("numero_parcela")
+                    total = item.get("parcelas_total")
+                    parcela_str = f"({numero}/{total}) "
+
+                output.append(
+                    f"     {subcat}\n"
+                    f"          {escopo_icon} {parcela_str}{desc}\n"
+                    f"            `{fmt(valor)}`"
+                )
 
     return output
 
@@ -286,11 +508,14 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
 def _to_date(value):
     if value is None:
         return None
+
     if isinstance(value, date):
         return value
+
     if isinstance(value, str):
         try:
             return date.fromisoformat(value)
         except ValueError:
             return None
+
     return None

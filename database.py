@@ -1,3 +1,4 @@
+# database.py
 import asyncpg
 import logging
 from datetime import date
@@ -7,6 +8,7 @@ from config import DATABASE_URL
 logger = logging.getLogger(__name__)
 pool: asyncpg.pool.Pool | None = None
 
+
 async def init_db_pool():
     global pool
     if pool is None:
@@ -15,11 +17,13 @@ async def init_db_pool():
         pool = await asyncpg.create_pool(dsn=DATABASE_URL, min_size=1, max_size=5)
         logger.info("Pool de banco inicializado com sucesso.")
 
+
 async def close_db_pool():
     global pool
     if pool:
         await pool.close()
         pool = None
+
 
 async def is_user_authorized(telegram_id: str) -> bool:
     async with pool.acquire() as conn:
@@ -28,6 +32,7 @@ async def is_user_authorized(telegram_id: str) -> bool:
             str(telegram_id)
         )
         return bool(row and row.get("authorized"))
+
 
 async def authorize_user(telegram_id: str, nome: str | None = None, username: str | None = None):
     async with pool.acquire() as conn:
@@ -40,14 +45,16 @@ async def authorize_user(telegram_id: str, nome: str | None = None, username: st
                   authorized = TRUE
         """, str(telegram_id), nome, username)
 
+
 async def insert_transacao(payload: dict):
     async with pool.acquire() as conn:
         await conn.execute("""
             INSERT INTO transacoes
               (telegram_user_id, tipo, categoria_text, subcategoria_text,
                escopo, descricao, valor, forma_pagamento, tipo_pagamento,
-               parcelas_total, data_transacao, data_vencimento, banco)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+               parcelas_total, data_transacao, data_vencimento, banco,
+               data_registro, criado_em)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
         """,
             str(payload.get("telegram_user_id")),
             payload.get("tipo"),
@@ -62,7 +69,10 @@ async def insert_transacao(payload: dict):
             payload.get("data_transacao"),
             payload.get("data_vencimento"),
             payload.get("banco"),
+            payload.get("data_registro"),
+            payload.get("criado_em"),
         )
+
 
 # ─── Auxiliares de Data ────
 
@@ -78,12 +88,12 @@ def _to_date(value) -> date | None:
             return None
     return None
 
+
 def _expand_transacao(row: dict) -> list[dict]:
     tipo_pag = row.get("tipo_pagamento") or "unica"
     parcelas_total = row.get("parcelas_total") or 1
     valor_total = float(row.get("valor") or 0.0)
-    
-    # Prioridade para vencimento em despesas, transação em receitas
+
     data_ref = _to_date(row.get("data_vencimento")) or _to_date(row.get("data_transacao"))
 
     if data_ref is None:
@@ -108,42 +118,55 @@ def _expand_transacao(row: dict) -> list[dict]:
         resultado.append(item)
     return resultado
 
+
 # ─── Fetch e Agrupamento ────
 
 async def _fetch_all_transacoes(telegram_user_id: str):
     async with pool.acquire() as conn:
-        receitas = await conn.fetch("SELECT * FROM transacoes WHERE telegram_user_id = $1 AND tipo = 'receita'", str(telegram_user_id))
-        desp_pessoal = await conn.fetch("SELECT * FROM transacoes WHERE telegram_user_id = $1 AND tipo = 'despesa' AND escopo = 'pessoal'", str(telegram_user_id))
-        desp_ambos = await conn.fetch("SELECT * FROM transacoes WHERE tipo = 'despesa' AND escopo = 'ambos'")
-    
+        receitas = await conn.fetch(
+            "SELECT * FROM transacoes WHERE telegram_user_id = $1 AND tipo = 'receita'",
+            str(telegram_user_id)
+        )
+        desp_pessoal = await conn.fetch(
+            "SELECT * FROM transacoes WHERE telegram_user_id = $1 AND tipo = 'despesa' AND escopo = 'pessoal'",
+            str(telegram_user_id)
+        )
+        desp_ambos = await conn.fetch(
+            "SELECT * FROM transacoes WHERE tipo = 'despesa' AND escopo = 'ambos'"
+        )
+
     return [dict(r) for r in receitas], [dict(r) for r in desp_pessoal], [dict(r) for r in desp_ambos]
+
 
 async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict:
     rec_raw, dp_raw, da_raw = await _fetch_all_transacoes(telegram_user_id)
 
-    # Expande e filtra por mês/ano
     receitas = [r for r in rec_raw if (d := _to_date(r.get("data_transacao"))) and d.year == ano and d.month == mes]
-    
+
     desp_pessoal = []
     for r in dp_raw:
-        desp_pessoal.extend([item for item in _expand_transacao(r) if (v := item["vencimento_parcela"]) and v.year == ano and v.month == mes])
+        desp_pessoal.extend([
+            item for item in _expand_transacao(r)
+            if (v := item["vencimento_parcela"]) and v.year == ano and v.month == mes
+        ])
 
     desp_ambos = []
     for r in da_raw:
-        desp_ambos.extend([item for item in _expand_transacao(r) if (v := item["vencimento_parcela"]) and v.year == ano and v.month == mes])
+        desp_ambos.extend([
+            item for item in _expand_transacao(r)
+            if (v := item["vencimento_parcela"]) and v.year == ano and v.month == mes
+        ])
 
-    # Cálculos
     total_receitas = sum(float(r["valor"]) for r in receitas)
     total_pessoal = sum(i["valor_parcela"] for i in desp_pessoal)
     total_ambos = sum(i["valor_parcela"] for i in desp_ambos)
-    
+
     meu_custo_real = total_pessoal + (total_ambos * 0.5)
     sobra = total_receitas - meu_custo_real
 
     def agrupar(rows, campo_valor="valor_parcela"):
         grupos = {}
         for r in rows:
-            # Normalizamos o nome da categoria para evitar que emojis diferentes ou espaços sumam com ela
             cat = (r.get("categoria_text") or "Outros").strip()
             grupos[cat] = grupos.get(cat, 0.0) + float(r.get(campo_valor, 0))
         return grupos
@@ -162,21 +185,23 @@ async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict
         "grupos_receitas": agrupar(receitas, "valor")
     }
 
+
 async def get_previous_balance(user_id: str, year: int, month: int) -> float:
-    """Soma as sobras de todos os meses anteriores no histórico do banco."""
     rec_raw, dp_raw, da_raw = await _fetch_all_transacoes(user_id)
-    
+
     todas_transacoes = rec_raw + dp_raw + da_raw
     if not todas_transacoes:
         return 0.0
 
-    # Acha o mês mais antigo no banco
     datas = []
     for t in todas_transacoes:
         d = _to_date(t.get("data_vencimento")) or _to_date(t.get("data_transacao"))
-        if d: datas.append(d)
-    
-    if not datas: return 0.0
+        if d:
+            datas.append(d)
+
+    if not datas:
+        return 0.0
+
     start_date = min(datas).replace(day=1)
     target_date = date(year, month, 1)
 
@@ -186,19 +211,24 @@ async def get_previous_balance(user_id: str, year: int, month: int) -> float:
         resumo = await get_monthly_summary(user_id, current.year, current.month)
         saldo_acumulado += resumo["sobra"]
         current += relativedelta(months=1)
-    
+
     return round(saldo_acumulado, 2)
+
 
 async def get_months_with_installments():
     async with pool.acquire() as conn:
-        rows = await conn.fetch("SELECT data_vencimento, parcelas_total FROM transacoes WHERE tipo_pagamento = 'parcelado'")
-    
+        rows = await conn.fetch(
+            "SELECT data_vencimento, parcelas_total FROM transacoes WHERE tipo_pagamento = 'parcelado'"
+        )
+
     meses = set()
     hoje = date.today().replace(day=1)
     for r in rows:
         d = _to_date(r["data_vencimento"])
-        if not d: continue
+        if not d:
+            continue
         for i in range(r["parcelas_total"] or 1):
             venc = d + relativedelta(months=i)
-            if venc >= hoje: meses.add((venc.year, venc.month))
+            if venc >= hoje:
+                meses.add((venc.year, venc.month))
     return sorted(meses)

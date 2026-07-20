@@ -1,6 +1,7 @@
 # handlers/register_transaction.py
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from aiogram import Router, F
 from aiogram.types import Message
@@ -13,6 +14,8 @@ import database
 
 logger = logging.getLogger(__name__)
 router = Router()
+
+BR_TZ = ZoneInfo("America/Sao_Paulo")
 
 
 class TransactionState(StatesGroup):
@@ -32,7 +35,7 @@ def parse_date_to_iso(date_text: str, use_today_on_dot: bool = False):
     text = (date_text or "").strip()
 
     if text == ".":
-        return datetime.today().date() if use_today_on_dot else None
+        return datetime.now(BR_TZ).date() if use_today_on_dot else None
 
     if text in ["-", ""]:
         return None
@@ -64,6 +67,7 @@ def normalize_payment_type(text: str) -> str:
 
 async def save_transaction(message: Message, state: FSMContext):
     dados = await state.get_data()
+    agora_br = datetime.now(BR_TZ)
 
     payload = {
         "telegram_user_id": str(message.from_user.id),
@@ -78,6 +82,8 @@ async def save_transaction(message: Message, state: FSMContext):
         "parcelas_total": dados.get("parcelas_total"),
         "data_transacao": dados.get("data_transacao"),
         "data_vencimento": dados.get("data_vencimento"),
+        "data_registro": agora_br.isoformat(),
+        "criado_em": agora_br.isoformat(),
         "banco": None,
     }
 

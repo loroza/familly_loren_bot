@@ -335,7 +335,7 @@ async def realizar_pagamento(callback: CallbackQuery):
     _, transacao_id = callback.data.split(":")
     transacao_id = int(transacao_id)
 
-    hoje = date.today().isoformat()
+    hoje = date.today()
 
     try:
         await database.update_transacao_to_realizado(transacao_id, hoje)

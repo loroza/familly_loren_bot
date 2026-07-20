@@ -66,13 +66,13 @@ async def insert_transacao(payload: dict):
             payload.get("forma_pagamento"),
             payload.get("tipo_pagamento"),
             payload.get("parcelas_total"),
-            payload.get("data_transacao"),
-            payload.get("data_vencimento"),
+            _to_date(payload.get("data_transacao")),
+            _to_date(payload.get("data_vencimento")),
             payload.get("banco"),
             payload.get("data_registro"),
             payload.get("criado_em"),
             payload.get("status", "realizado"),
-            payload.get("data_pagamento"),
+            _to_date(payload.get("data_pagamento")),
         )
 
 
@@ -83,7 +83,7 @@ async def update_transacao_to_realizado(transacao_id: int, data_pagamento: str):
             SET status = 'realizado',
                 data_pagamento = CAST($1 AS DATE)
             WHERE id = $2
-        """, data_pagamento, transacao_id)
+        """, _to_date(data_pagamento), transacao_id)
 
 
 async def get_pendentes_by_month(user_id: str, ano: int, mes: int):

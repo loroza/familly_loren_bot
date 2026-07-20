@@ -187,13 +187,8 @@ def _expand_transacao(row: dict) -> list[dict]:
 
 
 async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict:
-    """
-    Retorna um dicionário com campos necessários para o relatório mensal,
-    incluindo os valores do fluxo de caixa (realizado / previsto).
-    """
     rec_raw, dp_raw, da_raw = await _fetch_all_transacoes(telegram_user_id)
 
-    # Filtra por mês/ano considerando data_vencimento quando disponível
     def filtrar_por_mes(rows):
         out = []
         for r in rows:
@@ -206,59 +201,56 @@ async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict
     desp_pessoal = filtrar_por_mes(dp_raw)
     desp_ambos = filtrar_por_mes(da_raw)
 
-    # Fluxo de caixa: separado por status
-    realizado_receita = sum(float(r.get("valor") or 0.0) for r in receitas if (r.get("status") or "realizado") == "realizado")
-    previsto_receita = sum(float(r.get("valor") or 0.0) for r in receitas if (r.get("status") or "") == "previsto")
+    # Proteção: Garantir que valor seja float e não None
+    def total(lista, status_filter=None, multi=1.0):
+        soma = 0.0
+        for r in lista:
+            if status_filter and r.get("status") != status_filter:
+                continue
+            v = r.get("valor")
+            if v is not None:
+                soma += float(v) * multi
+        return soma
 
-    # Para despesas 'ambos' consideramos 50% como sua parte
-    realizado_gasto_pessoal = sum(float(r.get("valor") or 0.0) for r in desp_pessoal if (r.get("status") or "") == "realizado")
-    realizado_gasto_ambos = sum(float(r.get("valor") or 0.0) * 0.5 for r in desp_ambos if (r.get("status") or "") == "realizado")
-    realizado_gasto = realizado_gasto_pessoal + realizado_gasto_ambos
+    realizado_receita = total(receitas, "realizado")
+    previsto_receita = total(receitas, "previsto")
 
-    previsto_gasto_pessoal = sum(float(r.get("valor") or 0.0) for r in desp_pessoal if (r.get("status") or "") == "previsto")
-    previsto_gasto_ambos = sum(float(r.get("valor") or 0.0) * 0.5 for r in desp_ambos if (r.get("status") or "") == "previsto")
-    previsto_gasto = previsto_gasto_pessoal + previsto_gasto_ambos
+    realizado_gasto = total(desp_pessoal, "realizado") + total(desp_ambos, "realizado", 0.5)
+    previsto_gasto = total(desp_pessoal, "previsto") + total(desp_ambos, "previsto", 0.5)
 
-    # Totais para compatibilidade com relatório existente
-    total_receitas = sum(float(r.get("valor") or 0.0) for r in receitas)
-    total_pessoal = sum(float(r.get("valor") or 0.0) for r in desp_pessoal)
-    total_ambos = sum(float(r.get("valor") or 0.0) for r in desp_ambos)
+    total_receitas = total(receitas)
+    total_pessoal = total(desp_pessoal)
+    total_ambos = total(desp_ambos)
 
     meu_custo_real = total_pessoal + (total_ambos * 0.5)
     sobra = total_receitas - meu_custo_real
 
-    def agrupar(rows, campo_valor="valor"):
+    def agrupar(rows):
         grupos = {}
         for r in rows:
             cat = (r.get("categoria_text") or "Outros").strip()
-            grupos[cat] = grupos.get(cat, 0.0) + float(r.get(campo_valor, 0) or 0.0)
+            v = r.get("valor")
+            if v is not None:
+                grupos[cat] = grupos.get(cat, 0.0) + float(v)
         return grupos
 
-    saldo_atual_caixa = realizado_receita - realizado_gasto
-    saldo_projetado = (realizado_receita + previsto_receita) - (realizado_gasto + previsto_gasto)
-
     return {
-        "ano": ano,
-        "mes": mes,
-        "receitas": receitas,
-        "desp_pessoal": [item for r in desp_pessoal for item in _expand_transacao(r)],
-        "desp_ambos": [item for r in desp_ambos for item in _expand_transacao(r)],
+        "ano": ano, "mes": mes,
         "total_receitas": round(total_receitas, 2),
-        "total_pessoal": round(total_pessoal, 2),
-        "total_ambos": round(total_ambos, 2),
         "total_lancado": round(total_pessoal + total_ambos, 2),
         "meu_custo_real": round(meu_custo_real, 2),
         "sobra": round(sobra, 2),
-        "grupos_pessoal": agrupar(desp_pessoal, "valor"),
-        "grupos_ambos": agrupar(desp_ambos, "valor"),
-        "grupos_receitas": agrupar(receitas, "valor"),
-        # fluxo de caixa
+        "grupos_pessoal": agrupar(desp_pessoal),
+        "grupos_ambos": agrupar(desp_ambos),
+        "grupos_receitas": agrupar(receitas),
+        "receitas": receitas, "desp_pessoal": desp_pessoal, "desp_ambos": desp_ambos,
         "realizado_receita": round(realizado_receita, 2),
         "realizado_gasto": round(realizado_gasto, 2),
         "previsto_receita": round(previsto_receita, 2),
         "previsto_gasto": round(previsto_gasto, 2),
-        "saldo_atual_caixa": round(saldo_atual_caixa, 2),
-        "saldo_projetado": round(saldo_projetado, 2),
+        "saldo_atual_caixa": round(realizado_receita - realizado_gasto, 2),
+        "saldo_projetado": round((realizado_receita + previsto_receita) - (realizado_gasto + previsto_gasto), 2),
+        "total_pessoal": round(total_pessoal, 2), "total_ambos": round(total_ambos, 2)
     }
 
 

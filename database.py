@@ -53,8 +53,8 @@ async def insert_transacao(payload: dict):
               (telegram_user_id, tipo, categoria_text, subcategoria_text,
                escopo, descricao, valor, forma_pagamento, tipo_pagamento,
                parcelas_total, data_transacao, data_vencimento, banco,
-               data_registro, criado_em)
-            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+               data_registro, criado_em, status, data_pagamento)
+            VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
         """,
             str(payload.get("telegram_user_id")),
             payload.get("tipo"),
@@ -71,7 +71,35 @@ async def insert_transacao(payload: dict):
             payload.get("banco"),
             payload.get("data_registro"),
             payload.get("criado_em"),
+            payload.get("status", "realizado"),
+            payload.get("data_pagamento"),
         )
+
+
+async def update_transacao_to_realizado(transacao_id: int, data_pagamento: str):
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            UPDATE transacoes
+            SET status = 'realizado',
+                data_pagamento = $1
+            WHERE id = $2
+        """, data_pagamento, transacao_id)
+
+
+async def get_pendentes_by_month(user_id: str, ano: int, mes: int):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT * FROM transacoes
+            WHERE telegram_user_id = $1
+              AND status = 'previsto'
+              AND (
+                  (data_vencimento IS NOT NULL AND EXTRACT(YEAR FROM data_vencimento) = $2 AND EXTRACT(MONTH FROM data_vencimento) = $3)
+                  OR
+                  (data_vencimento IS NULL AND EXTRACT(YEAR FROM data_transacao) = $2 AND EXTRACT(MONTH FROM data_transacao) = $3)
+              )
+            ORDER BY data_vencimento, data_transacao
+        """, str(user_id), ano, mes)
+    return [dict(r) for r in rows]
 
 
 # ─── Auxiliares de Data ────

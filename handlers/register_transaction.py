@@ -29,6 +29,7 @@ class TransactionState(StatesGroup):
     waiting_for_payment_method = State()
     waiting_for_payment_type = State()
     waiting_for_installments = State()
+    waiting_for_status = State()
 
 
 def parse_date_to_iso(date_text: str, use_today_on_dot: bool = False):
@@ -68,6 +69,11 @@ def normalize_payment_type(text: str) -> str:
 async def save_transaction(message: Message, state: FSMContext):
     dados = await state.get_data()
     agora_br = datetime.now(BR_TZ)
+    status = dados.get("status", "realizado")
+    data_pagamento = None
+
+    if status == "realizado":
+        data_pagamento = dados.get("data_transacao") or agora_br.date()
 
     payload = {
         "telegram_user_id": str(message.from_user.id),
@@ -85,6 +91,8 @@ async def save_transaction(message: Message, state: FSMContext):
         "data_registro": agora_br.isoformat(),
         "criado_em": agora_br.isoformat(),
         "banco": None,
+        "status": status,
+        "data_pagamento": data_pagamento,
     }
 
     try:
@@ -93,6 +101,8 @@ async def save_transaction(message: Message, state: FSMContext):
         parcelas_texto = str(payload["parcelas_total"]) if payload["parcelas_total"] is not None else "-"
         data_transacao_texto = str(payload["data_transacao"]) if payload["data_transacao"] else "-"
         data_vencimento_texto = str(payload["data_vencimento"]) if payload["data_vencimento"] else "-"
+        status_texto = "✅ Realizado" if payload["status"] == "realizado" else "⏳ Previsto"
+        data_pagamento_texto = str(payload["data_pagamento"]) if payload["data_pagamento"] else "-"
 
         await message.answer(
             f"✅ Registrado com sucesso!\n\n"
@@ -104,7 +114,9 @@ async def save_transaction(message: Message, state: FSMContext):
             f"🗓️ Data de vencimento: {data_vencimento_texto}\n"
             f"💳 Forma de pagamento: {payload['forma_pagamento'] or '-'}\n"
             f"📦 Tipo de pagamento: {payload['tipo_pagamento'] or '-'}\n"
-            f"🔢 Parcelas: {parcelas_texto}",
+            f"🔢 Parcelas: {parcelas_texto}\n"
+            f"📌 Status: {status_texto}\n"
+            f"💵 Data de pagamento: {data_pagamento_texto}",
             reply_markup=keyboards.main_menu_keyboard()
         )
 
@@ -284,7 +296,11 @@ async def select_payment_type(message: Message, state: FSMContext):
         return
 
     await state.update_data(parcelas_total=None)
-    await save_transaction(message, state)
+    await state.set_state(TransactionState.waiting_for_status)
+    await message.answer(
+        "Essa transação já foi realizada ou é prevista?",
+        reply_markup=keyboards.status_keyboard()
+    )
 
 
 @router.message(StateFilter(TransactionState.waiting_for_installments))
@@ -296,7 +312,29 @@ async def enter_installments(message: Message, state: FSMContext):
             return
 
         await state.update_data(parcelas_total=parcelas)
-        await save_transaction(message, state)
+        await state.set_state(TransactionState.waiting_for_status)
+        await message.answer(
+            "Essa transação já foi realizada ou é prevista?",
+            reply_markup=keyboards.status_keyboard()
+        )
 
     except ValueError:
         await message.answer("❌ Digite apenas números inteiros. Ex: 6")
+
+
+@router.message(StateFilter(TransactionState.waiting_for_status))
+async def select_status(message: Message, state: FSMContext):
+    texto = (message.text or "").strip()
+
+    if texto == "✅ Realizado":
+        await state.update_data(status="realizado")
+    elif texto == "⏳ Previsto":
+        await state.update_data(status="previsto")
+    else:
+        await message.answer(
+            "❌ Escolha uma opção do teclado: ✅ Realizado ou ⏳ Previsto.",
+            reply_markup=keyboards.status_keyboard()
+        )
+        return
+
+    await save_transaction(message, state)

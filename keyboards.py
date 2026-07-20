@@ -70,6 +70,21 @@ def main_menu_keyboard():
     )
 
 
+# ─── Status: Previsto / Realizado ───
+
+def status_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="✅ Realizado"),
+                KeyboardButton(text="⏳ Previsto")
+            ]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
+
+
 # ─── Escopo ───
 
 def scope_keyboard():
@@ -242,7 +257,7 @@ def report_month_keyboard():
     )
 
 
-# ─── Ver Lançamentos ───
+# ─── Ver Lançamentos + Pendentes ───
 
 def detail_inline_keyboard(ano: int, mes: int, user_id: str):
     return InlineKeyboardMarkup(
@@ -251,6 +266,23 @@ def detail_inline_keyboard(ano: int, mes: int, user_id: str):
                 InlineKeyboardButton(
                     text="🔍 Ver Lançamentos",
                     callback_data=f"detail:{ano}:{mes}:{user_id}"
+                ),
+                InlineKeyboardButton(
+                    text="⏳ Pendentes",
+                    callback_data=f"pending:{ano}:{mes}:{user_id}"
+                )
+            ]
+        ]
+    )
+
+
+def realizar_pagamento_inline_keyboard(transacao_id: int):
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="✅ Realizar pagamento",
+                    callback_data=f"realizar:{transacao_id}"
                 )
             ]
         ]

@@ -449,9 +449,9 @@ async def show_detail(callback: CallbackQuery):
 
     texto_final = "\n".join(linhas)
 
-    if len(texto_final) > 4000:
+    if len(texto_final) > 8000:
         texto_final = (
-            texto_final[:3900]
+            texto_final[:7900]
             + "\n\n...(Relatório muito longo, exibindo apenas o início)"
         )
 
@@ -507,7 +507,7 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
                     parcela_str = f"({numero}/{total}) "
 
                 output.append(
-                    f"          {escopo_icon} `{fmt(valor)}` → {parcela_str}{desc}\n"
+                    f"          {escopo_icon} `{fmt(valor)}` → {parcela_str}{desc}"
                 )
 
     return output

@@ -1,3 +1,4 @@
+# database.py
 import asyncpg
 import logging
 from datetime import date, datetime
@@ -64,17 +65,16 @@ async def insert_transacao(payload: dict):
             total_parcelas = 1
 
         valor_total = float(payload.get("valor") or 0.0)
-        # Ajuste para evitar soma com erro por arredondamento:
         valor_parcela = round(valor_total / total_parcelas, 2)
 
+        # Base para o vencimento: Prioriza data_vencimento informada, senão data_transacao
         data_base_venc = _to_date(payload.get("data_vencimento")) or _to_date(payload.get("data_transacao"))
 
         for i in range(total_parcelas):
-            # status da parcela atual e data_pagamento
             status_atual = payload.get("status", "realizado")
             dt_pagamento = _to_date(payload.get("data_pagamento"))
 
-            # Para parcelas além da primeira, sempre previsto
+            # Parcelas futuras são sempre previstas
             if i > 0:
                 status_atual = "previsto"
                 dt_pagamento = None
@@ -142,20 +142,17 @@ async def get_pendentes_by_month(user_id: str, ano: int, mes: int):
 def _to_date(value) -> date | None:
     if value is None:
         return None
-    if isinstance(value, date):
+    if isinstance(value, date) and not isinstance(value, datetime):
         return value
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, str):
         try:
-            # aceita strings ISO completas ou apenas data
             return date.fromisoformat(value[:10])
         except Exception:
             return None
     return None
 
-
-# Helpers usados pelo relatório mensal
 
 async def _fetch_all_transacoes(telegram_user_id: str):
     async with pool.acquire() as conn:
@@ -171,25 +168,13 @@ async def _fetch_all_transacoes(telegram_user_id: str):
     return [dict(r) for r in receitas], [dict(r) for r in desp_pessoal], [dict(r) for r in desp_ambos]
 
 
-def _expand_transacao(row: dict) -> list[dict]:
-    """
-    Mantida por compatibilidade com dados antigos; como agora criamos registros
-    reais por parcela, retornamos a própria linha com campos adicionais.
-    """
-    item = dict(row)
-    # normaliza data de vencimento da parcela
-    item["vencimento_parcela"] = _to_date(row.get("data_vencimento")) or _to_date(row.get("data_transacao"))
-    try:
-        item["valor_parcela"] = float(row.get("valor") or 0.0)
-    except Exception:
-        item["valor_parcela"] = 0.0
-    return [item]
-
-
 async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict:
     rec_raw, dp_raw, da_raw = await _fetch_all_transacoes(telegram_user_id)
 
     def filtrar_por_mes(rows):
+        """
+        Regra solicitada: Prioriza data_vencimento. Se nula, usa data_transacao.
+        """
         out = []
         for r in rows:
             d = _to_date(r.get("data_vencimento")) or _to_date(r.get("data_transacao"))
@@ -201,7 +186,6 @@ async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict
     desp_pessoal = filtrar_por_mes(dp_raw)
     desp_ambos = filtrar_por_mes(da_raw)
 
-    # Proteção: Garantir que valor seja float e não None
     def total(lista, status_filter=None, multi=1.0):
         soma = 0.0
         for r in lista:
@@ -255,15 +239,11 @@ async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict
 
 
 async def get_previous_balance(user_id: str, year: int, month: int) -> float:
-    """
-    Calcula um saldo acumulado até o mês anterior (simplificado).
-    """
     rec_raw, dp_raw, da_raw = await _fetch_all_transacoes(user_id)
     todas = rec_raw + dp_raw + da_raw
     if not todas:
         return 0.0
 
-    # calcula somando todas as transações com data menor que o primeiro dia do target
     target = date(year, month, 1)
     saldo = 0.0
     for r in todas:

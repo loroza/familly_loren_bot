@@ -449,9 +449,9 @@ async def show_detail(callback: CallbackQuery):
 
     texto_final = "\n".join(linhas)
 
-    if len(texto_final) > 8000:
+    if len(texto_final) > 5000:
         texto_final = (
-            texto_final[:7900]
+            texto_final[:4900]
             + "\n\n...(Relatório muito longo, exibindo apenas o início)"
         )
 

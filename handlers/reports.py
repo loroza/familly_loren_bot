@@ -48,6 +48,15 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     linhas.append(f"{emoji_total} *SALDO ACUMULADO:* `{fmt(saldo_total)}`")
     linhas.append("")
 
+    # --- NOVO BLOCO: FLUXO DE CAIXA ---
+    linhas.append("💰 *FLUXO DE CAIXA (Sprints)*")
+    linhas.append(f"✅ Realizado: `{fmt(data.get('realizado_receita', 0.0))}` recebido / `{fmt(data.get('realizado_gasto', 0.0))}` pago")
+    linhas.append(f"💎 *Saldo em conta:* `{fmt(data.get('saldo_atual_caixa', 0.0))}`")
+    linhas.append(f"⏳ Previsto: `{fmt(data.get('previsto_receita', 0.0))}` a receber / `{fmt(data.get('previsto_gasto', 0.0))}` a gastar")
+    linhas.append(f"🏁 *Projeção fim do mês:* `{fmt(data.get('saldo_projetado', 0.0))}`")
+    linhas.append("")
+
+    # --- RESTANTE DO RELATÓRIO IGUAL ---
     linhas.append("📈 *ENTRADAS*")
     linhas.append(f"`{fmt(data['total_receitas'])}`")
     if data["grupos_receitas"]:
@@ -352,10 +361,10 @@ async def realizar_pagamento(callback: CallbackQuery):
     await callback.answer()
 
 
-# Modifique apenas a parte de formatar a hierarquia no handlers/reports.py
 def _format_group_hierarchy(items_list: list) -> list[str]:
     def get_date(item):
-        return item.get("data_vencimento") or item.get("data_transacao") or date(1970,1,1)
+        d = item.get("vencimento_parcela") or item.get("data_transacao")
+        return _to_date(d) or date(1970, 1, 1)
 
     sorted_items = sorted(items_list, key=get_date)
     output = []
@@ -364,21 +373,39 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
     for item in sorted_items:
         date_str = get_date(item).strftime("%d/%m/%Y")
         cat = (item.get("categoria_text") or "Outros").title()
-        if date_str not in grouped: grouped[date_str] = {}
-        if cat not in grouped[date_str]: grouped[date_str][cat] = []
+
+        if date_str not in grouped:
+            grouped[date_str] = {}
+        if cat not in grouped[date_str]:
+            grouped[date_str][cat] = []
+
         grouped[date_str][cat].append(item)
 
     for date_str, categories in grouped.items():
         output.append(f"\n📅 *{date_str}*")
+
         for cat, items in categories.items():
             output.append(f"\n  📂 *{cat}*")
+
             for item in items:
-                desc = (item.get("descricao") or item.get("subcategoria_text") or "-").title()
-                val = float(item.get("valor", 0))
-                escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
-                status_icon = "⏳" if item.get("status") == "previsto" else ""
-                
-                output.append(f"          {escopo_icon} `{fmt(val)}` ► {status_icon}{desc}")
+                subcat = item.get("subcategoria_text")
+                desc = (item.get("descricao") or subcat or "-").title()
+                val = item.get("valor_parcela") or float(item.get("valor", 0))
+                escopo = item.get("escopo", "")
+                tipo_pag = item.get("tipo_pagamento", "")
+
+                escopo_icon = "🏠" if escopo == "ambos" else "👤"
+
+                parcela_str = ""
+                if tipo_pag == "parcelado":
+                    num = item.get("numero_parcela")
+                    tot = item.get("parcelas_total")
+                    parcela_str = f"({num}/{tot}) "
+
+                output.append(
+                    f"          {escopo_icon} `{fmt(val)}` ► {parcela_str}{desc}"
+                )
+
     return output
 
 

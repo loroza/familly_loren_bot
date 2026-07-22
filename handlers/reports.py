@@ -230,11 +230,11 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
             desc = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
             num = p.get("numero_parcela", 1)
             total_p = p.get("parcelas_total", 1)
-            venc = _get_ref_date(p)
+            venc = p.get("data_vencimento") or p.get("vencimento") or p.get("data_venc") or p.get("venc") or p.get("vencimento_parcela")
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
             val_parcela = p.get("valor_parcela") or float(p.get("valor", 0) or 0)
-            linhas.append(f"  {escopo_icon} {desc} — venc. {venc_str} — `{fmt(val_parcela)}`")
+            linhas.append(f"  {venc_str}•{escopo_icon} {desc} — `{fmt(val_parcela)}`")
         linhas.append("")
 
     linhas.append("⚖️ *SOBRA LÍQUIDA*")

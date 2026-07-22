@@ -158,7 +158,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
             val_parcela = p.get("valor_parcela") or float(p.get("valor", 0) or 0)
-            linhas.append(f"  {escopo_icon} {desc.title()} — {num}/{total_p} — venc. {venc_str} — `{fmt(val_parcela)}`")
+            linhas.append(f"  {escopo_icon} {desc} — venc. {venc_str} — `{fmt(val_parcela)}`")
         linhas.append("")
 
     linhas.append("⚖️ *SOBRA LÍQUIDA*")

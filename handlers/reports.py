@@ -1,5 +1,6 @@
 # handlers/reports.py
 import logging
+import re
 from datetime import date, datetime
 
 from aiogram import Router, F
@@ -108,6 +109,18 @@ def _belongs_to_month(item: dict, ano: int, mes: int) -> bool:
     return False
 
 
+# --- Markdown escape helper (para parse_mode="Markdown") ---
+_md_esc_re = re.compile(r'([_\*\[\]\(\)`])')
+
+def _escape_md(text: str) -> str:
+    """Escapa caracteres que quebram o parse de Markdown do Telegram
+    para strings dinâmicas vindas do banco.
+    """
+    if text is None:
+        return ""
+    return _md_esc_re.sub(r'\\\1', str(text))
+
+
 def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     mes_nome = MESES_PT[data["mes"]]
     ano = data["ano"]
@@ -156,7 +169,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     saldo_mes = total_receitas_calc - meu_custo_real_calc
     saldo_total = saldo_anterior + saldo_mes
 
-    linhas = [f"📊 *RESUMO FINANCEIRO{titulo_extra}*", f"📅 {mes_nome.upper()}/{ano}", ""]
+    linhas = [f"📊 *RESUMO FINANCEIRO{_escape_md(titulo_extra)}*", f"📅 {_escape_md(mes_nome.upper())}/{ano}", ""]
 
     if saldo_anterior != 0.0:
         emoji_ant = "🟢" if saldo_anterior >= 0 else "🔴"
@@ -183,7 +196,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     if data["grupos_receitas"]:
         for cat, val in sorted(data["grupos_receitas"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_receitas"] * 100) if data["total_receitas"] > 0 else 0
-            linhas.append(f"  • {cat.title()}: `{fmt(val)}` _{pct:.0f}%_")
+            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` _{pct:.0f}%_")
     else:
         linhas.append("  _Nenhuma receita registrada_")
     linhas.append("")
@@ -198,14 +211,14 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         linhas.append("👤 *Pessoais*")
         for cat, val in sorted(data["grupos_pessoal"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_pessoal"] * 100) if data["total_pessoal"] > 0 else 0
-            linhas.append(f"  • {cat.title()}: `{fmt(val)}` _{pct:.0f}%_")
+            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` _{pct:.0f}%_")
         linhas.append("")
 
     if data["grupos_ambos"]:
         linhas.append("🏠 *Compartilhadas* _(50% do total)_")
         for cat, val in sorted(data["grupos_ambos"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_ambos"] * 100) if data["total_ambos"] > 0 else 0
-            linhas.append(f"  • {cat.title()}: `{fmt(val)}` _{pct:.0f}%_")
+            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` _{pct:.0f}%_")
         linhas.append(f"  Total casal: `{fmt(data['total_ambos'])}`")
         linhas.append(f"  Sua parte: `{fmt(data['total_ambos'] * 0.5)}`")
         linhas.append("")
@@ -227,14 +240,15 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         linhas.append("💳 *PARCELAS DO MÊS*")
         parcelados_sorted = sorted(parcelados, key=lambda r: _get_ref_date(r) or date(1970, 1, 1))
         for p in parcelados_sorted:
-            desc = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
+            desc_raw = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
+            desc = _escape_md(desc_raw)
             num = p.get("numero_parcela", 1)
             total_p = p.get("parcelas_total", 1)
-            venc = p.get("data_vencimento") or p.get("vencimento") or p.get("data_venc") or p.get("venc") or p.get("vencimento_parcela")
+            venc = _to_date(p.get("data_vencimento") or p.get("vencimento") or p.get("data_venc") or p.get("venc") or p.get("vencimento_parcela"))
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
             val_parcela = p.get("valor_parcela") or float(p.get("valor", 0) or 0)
-            linhas.append(f"  {venc_str}•{escopo_icon} {desc} — `{fmt(val_parcela)}`")
+            linhas.append(f"  {escopo_icon} {venc_str} • {desc} — `{fmt(val_parcela)}`")
         linhas.append("")
 
     linhas.append("⚖️ *SOBRA LÍQUIDA*")
@@ -275,7 +289,7 @@ def _generate_insights(data: dict, saldo_total: float = None) -> list[str]:
 
     if todos_grupos:
         maior_cat = max(todos_grupos, key=todos_grupos.get)
-        insights.append(f"📌 Maior gasto: *{maior_cat.title()}* com `{fmt(todos_grupos[maior_cat])}`.")
+        insights.append(f"📌 Maior gasto: *{_escape_md(maior_cat.title())}* com `{fmt(todos_grupos[maior_cat])}`.")
 
     if saldo_total is not None and saldo_total < 0:
         insights.append(f"🔴 Saldo acumulado negativo de `{fmt(abs(saldo_total))}`. Atenção!")
@@ -435,9 +449,9 @@ async def show_detail(callback: CallbackQuery):
     data = await database.get_monthly_summary(str(user_id), ano, mes)
     mes_nome = MESES_PT[mes]
 
-    linhas = [f"🔍 *LANÇAMENTOS — {mes_nome.upper()}/{ano}*", ""]
+    linhas = [f"🔍 *LANÇAMENTOS — {_escape_md(mes_nome.upper())}/{ano}*", ""]
 
-    # Separar despesas e receitas e filtrar por pertencimento ao mas do relatório
+    # Separar despesas e receitas e filtrar por pertencimento ao mês do relatório
     despesas = (data.get("desp_pessoal", []) + data.get("desp_ambos", []))
     receitas = data.get("receitas", [])
 
@@ -456,10 +470,10 @@ async def show_detail(callback: CallbackQuery):
                 grupos_rec.setdefault(cat, []).append(r)
 
             for cat in sorted(grupos_rec.keys()):
-                linhas.append(f"📂 *{cat.title()}*")
+                linhas.append(f"📂 *{_escape_md(cat.title())}*")
                 items = sorted(grupos_rec[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
                 for item in items:
-                    desc = (item.get("descricao") or item.get("subcategoria_text") or "-")
+                    desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m/%Y") if data_ref else "-"
@@ -475,10 +489,10 @@ async def show_detail(callback: CallbackQuery):
                 grupos_desp.setdefault(cat, []).append(r)
 
             for cat in sorted(grupos_desp.keys()):
-                linhas.append(f"📂 *{cat.title()}*")
+                linhas.append(f"📂 *{_escape_md(cat.title())}*")
                 items = sorted(grupos_desp[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
                 for item in items:
-                    desc = (item.get("descricao") or item.get("subcategoria_text") or "-")
+                    desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                     escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
@@ -510,7 +524,7 @@ async def show_pending(callback: CallbackQuery):
 
     if not pendentes:
         await callback.message.answer(
-            f"_Nenhuma transação prevista para {MESES_PT[mes]}/{ano}._",
+            f"_Nenhuma transação prevista para {_escape_md(MESES_PT[mes])}/{ano}._",
             parse_mode="Markdown"
         )
         await callback.answer()
@@ -525,14 +539,14 @@ async def show_pending(callback: CallbackQuery):
 
         msg = (
             f"⏳ *TRANSAÇÃO PREVISTA*\n\n"
-            f"📂 {item.get('categoria_text', '-')} › {item.get('subcategoria_text', '-')}\n"
+            f"📂 {_escape_md(item.get('categoria_text', '-'))} › {_escape_md(item.get('subcategoria_text', '-'))}\n"
             f"💰 `{fmt(float(item.get('valor') or 0))}`\n"
-            f"🔖 Escopo: {item.get('escopo', '-')}\n"
-            f"📝 Descrição: {item.get('descricao') or '-'}\n"
-            f"📅 Data da transação: {str(item.get('data_transacao')) or '-'}\n"
-            f"🗓️ Data de referência: {data_venc_texto}\n"
-            f"💳 Forma de pagamento: {item.get('forma_pagamento') or '-'}\n"
-            f"📦 Tipo de pagamento: {item.get('tipo_pagamento') or '-'}\n"
+            f"🔖 Escopo: {_escape_md(item.get('escopo', '-'))}\n"
+            f"📝 Descrição: {_escape_md(item.get('descricao') or '-')}\n"
+            f"📅 Data da transação: {_escape_md(str(item.get('data_transacao')) or '-')}\n"
+            f"🗓️ Data de referência: {_escape_md(data_venc_texto)}\n"
+            f"💳 Forma de pagamento: {_escape_md(item.get('forma_pagamento') or '-')}\n"
+            f"📦 Tipo de pagamento: {_escape_md(item.get('tipo_pagamento') or '-')}\n"
             f"📌 Status: {status_texto}\n"
         )
 
@@ -558,7 +572,8 @@ async def realizar_pagamento(callback: CallbackQuery):
         await database.update_transacao_to_realizado(transacao_id, hoje)
         # Tentar editar a mensagem original para incluir confirmação
         try:
-            await callback.message.edit_text(callback.message.text + "\n\n✅ *Pagamento realizado com sucesso!*", parse_mode="Markdown")
+            # Não forçar parse_mode aqui para evitar reparse de entidades já presentes na mensagem
+            await callback.message.edit_text((callback.message.text or "") + "\n\n✅ Pagamento realizado com sucesso!")
         except Exception:
             # se não for possível editar (mensagem muito antiga, etc.), apenas enviar nova mensagem
             await callback.message.answer("✅ *Pagamento realizado com sucesso!*", parse_mode="Markdown")
@@ -591,11 +606,11 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
         grouped[date_str][cat].append(item)
 
     for date_str, categories in grouped.items():
-        output.append(f"\n📅 *{date_str}*")
+        output.append(f"\n📅 *{_escape_md(date_str)}*")
         for cat, items in categories.items():
-            output.append(f"\n  📂 *{cat}*")
+            output.append(f"\n  📂 *{_escape_md(cat)}*")
             for item in items:
-                desc = (item.get("descricao") or item.get("subcategoria_text") or "-").title()
+                desc = _escape_md((item.get("descricao") or item.get("subcategoria_text") or "-").title())
                 val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                 escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                 parcela_str = ""

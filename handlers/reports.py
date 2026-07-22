@@ -79,12 +79,81 @@ def _get_ref_date(item: dict):
     return None
 
 
+def _belongs_to_month(item: dict, ano: int, mes: int) -> bool:
+    """Determina se um lançamento pertence ao mês/ano do relatório.
+    Regra de pertencimento (prioridade):
+      1) data_transacao (transações efetivas pertencem ao mês da transação)
+      2) data_pagamento (data em que foi pago)
+      3) data_vencimento (vencimento / previsão)
+    Retorna True se a data correspondente pertencer ao ano/mes informados.
+    """
+    if not item:
+        return False
+
+    # 1) data_transacao
+    dt = _to_date(item.get("data_transacao") or item.get("transacao") or item.get("data_transacao_date"))
+    if dt:
+        return dt.year == ano and dt.month == mes
+
+    # 2) data_pagamento
+    dt = _to_date(item.get("data_pagamento") or item.get("data_pagamento_date") or item.get("pagamento") or item.get("data_pago"))
+    if dt:
+        return dt.year == ano and dt.month == mes
+
+    # 3) data_vencimento / vencimento_parcela
+    dt = _to_date(item.get("data_vencimento") or item.get("vencimento") or item.get("data_venc") or item.get("venc") or item.get("vencimento_parcela"))
+    if dt:
+        return dt.year == ano and dt.month == mes
+
+    return False
+
+
 def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     mes_nome = MESES_PT[data["mes"]]
     ano = data["ano"]
 
     saldo_anterior = data.get("saldo_anterior", 0.0)
-    saldo_mes = data["sobra"]
+    # Recalcular totais com a regra de pertencimento (priorizando data_transacao)
+    # Isso corrige casos em que o banco/summary trouxe itens por vencimento em vez de por data de transação.
+    receitas_raw = data.get("receitas", [])
+    receitas_mes = [r for r in receitas_raw if _belongs_to_month(r, ano, data["mes"])]
+    total_receitas_calc = sum((r.get("valor_parcela") or float(r.get("valor", 0) or 0)) for r in receitas_mes)
+    grupos_receitas_calc: dict = {}
+    for r in receitas_mes:
+        cat = (r.get("categoria_text") or "Outros").strip()
+        grupos_receitas_calc[cat] = grupos_receitas_calc.get(cat, 0) + (r.get("valor_parcela") or float(r.get("valor", 0) or 0))
+
+    despesas_raw = data.get("desp_pessoal", []) + data.get("desp_ambos", [])
+    despesas_mes = [r for r in despesas_raw if _belongs_to_month(r, ano, data["mes"])]
+    total_lancado_calc = sum((r.get("valor_parcela") or float(r.get("valor", 0) or 0)) for r in despesas_mes)
+
+    grupos_pessoal_calc: dict = {}
+    grupos_ambos_calc: dict = {}
+    total_pessoal_calc = 0.0
+    total_ambos_calc = 0.0
+    for r in despesas_mes:
+        val = (r.get("valor_parcela") or float(r.get("valor", 0) or 0))
+        cat = (r.get("categoria_text") or "Outros").strip()
+        if r.get("escopo") == "ambos":
+            grupos_ambos_calc[cat] = grupos_ambos_calc.get(cat, 0) + val
+            total_ambos_calc += val
+        else:
+            grupos_pessoal_calc[cat] = grupos_pessoal_calc.get(cat, 0) + val
+            total_pessoal_calc += val
+
+    meu_custo_real_calc = total_pessoal_calc + (total_ambos_calc * 0.5)
+
+    # Atualizar os campos do dicionário para que o restante do relatório use os valores corrigidos
+    data["total_receitas"] = total_receitas_calc
+    data["grupos_receitas"] = grupos_receitas_calc
+    data["total_lancado"] = total_lancado_calc
+    data["meu_custo_real"] = meu_custo_real_calc
+    data["grupos_pessoal"] = grupos_pessoal_calc
+    data["total_pessoal"] = total_pessoal_calc
+    data["grupos_ambos"] = grupos_ambos_calc
+    data["total_ambos"] = total_ambos_calc
+
+    saldo_mes = total_receitas_calc - meu_custo_real_calc
     saldo_total = saldo_anterior + saldo_mes
 
     linhas = [f"📊 *RESUMO FINANCEIRO{titulo_extra}*", f"📅 {mes_nome.upper()}/{ano}", ""]
@@ -146,9 +215,16 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         r for r in (data.get("desp_pessoal", []) + data.get("desp_ambos", []))
         if (r.get("tipo_pagamento") or "unico") == "parcelado"
     ]
+    # Filtrar apenas as parcelas cuja data de referência pertence ao mês/ano do relatório
+    def _is_in_report_month(item):
+        d = _get_ref_date(item)
+        if not d:
+            return False
+        return d.year == data["ano"] and d.month == data["mes"]
+
+    parcelados = [p for p in parcelados if _is_in_report_month(p)]
     if parcelados:
         linhas.append("💳 *PARCELAS DO MÊS*")
-        # ordenar por data de referência
         parcelados_sorted = sorted(parcelados, key=lambda r: _get_ref_date(r) or date(1970, 1, 1))
         for p in parcelados_sorted:
             desc = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
@@ -361,29 +437,59 @@ async def show_detail(callback: CallbackQuery):
 
     linhas = [f"🔍 *LANÇAMENTOS — {mes_nome.upper()}/{ano}*", ""]
 
-    todas = data.get("desp_pessoal", []) + data.get("desp_ambos", []) + data.get("receitas", [])
+    # Separar despesas e receitas e filtrar por pertencimento ao mas do relatório
+    despesas = (data.get("desp_pessoal", []) + data.get("desp_ambos", []))
+    receitas = data.get("receitas", [])
 
-    if not todas:
+    despesas = [r for r in despesas if _belongs_to_month(r, ano, mes)]
+    receitas = [r for r in receitas if _belongs_to_month(r, ano, mes)]
+
+    if not despesas and not receitas:
         linhas.append("_Nenhum lançamento encontrado para este período._")
     else:
-        # Agrupar por categoria (como antes), mas ordenar itens por data de referência
-        grupos: dict[str, list] = {}
-        for r in todas:
-            cat = (r.get("categoria_text") or "Outros").strip()
-            grupos.setdefault(cat, []).append(r)
+        # Receitas
+        if receitas:
+            linhas.append("📥 *RECEITAS*")
+            grupos_rec: dict[str, list] = {}
+            for r in receitas:
+                cat = (r.get("categoria_text") or "Outros").strip()
+                grupos_rec.setdefault(cat, []).append(r)
 
-        for cat in sorted(grupos.keys()):
-            linhas.append(f"📂 *{cat.title()}*")
-            items = sorted(grupos[cat], key=lambda x: _get_ref_date(x) or date(1970, 1, 1))
-            for item in items:
-                desc = (item.get("descricao") or item.get("subcategoria_text") or "-")
-                val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
-                escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
-                data_ref = _get_ref_date(item) or _to_date(item.get("data_transacao"))
-                data_str = data_ref.strftime("%d/%m/%Y") if data_ref else "-"
+            for cat in sorted(grupos_rec.keys()):
+                linhas.append(f"📂 *{cat.title()}*")
+                items = sorted(grupos_rec[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
+                for item in items:
+                    desc = (item.get("descricao") or item.get("subcategoria_text") or "-")
+                    val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
+                    data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
+                    data_str = data_ref.strftime("%d/%m/%Y") if data_ref else "-"
+                    linhas.append(f"  🧾 {data_str} • {desc} — `{fmt(val)}`")
+                linhas.append("")
 
-                linhas.append(f"  {escopo_icon} {data_str} • {desc} — `{fmt(val)}`")
-            linhas.append("")
+        # Despesas
+        if despesas:
+            linhas.append("📤 *DESPESAS*")
+            grupos_desp: dict[str, list] = {}
+            for r in despesas:
+                cat = (r.get("categoria_text") or "Outros").strip()
+                grupos_desp.setdefault(cat, []).append(r)
+
+            for cat in sorted(grupos_desp.keys()):
+                linhas.append(f"📂 *{cat.title()}*")
+                items = sorted(grupos_desp[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
+                for item in items:
+                    desc = (item.get("descricao") or item.get("subcategoria_text") or "-")
+                    val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
+                    escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
+                    data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
+                    data_str = data_ref.strftime("%d/%m/%Y") if data_ref else "-"
+                    parcela_str = ""
+                    if (item.get("tipo_pagamento") or "") == "parcelado":
+                        num = item.get("numero_parcela")
+                        tot = item.get("parcelas_total")
+                        parcela_str = f"({num}/{tot}) " if num and tot else ""
+                    linhas.append(f"  {escopo_icon} {data_str} • {parcela_str}{desc} — `{fmt(val)}`")
+                linhas.append("")
 
     texto_final = "\n".join(linhas)
     if len(texto_final) > 4000:

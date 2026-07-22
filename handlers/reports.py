@@ -376,17 +376,13 @@ async def show_detail(callback: CallbackQuery):
             linhas.append(f"📂 *{cat.title()}*")
             items = sorted(grupos[cat], key=lambda x: _get_ref_date(x) or date(1970, 1, 1))
             for item in items:
-                desc = (item.get("descricao") or item.get("subcategoria_text") or "-").title()
+                desc = (item.get("descricao") or item.get("subcategoria_text") or "-")
                 val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                 escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
-                venc = _get_ref_date(item) or _to_date(item.get("data_transacao"))
-                venc_str = venc.strftime("%d/%m/%Y") if venc else "-"
-                parcela_str = ""
-                if (item.get("tipo_pagamento") or "") == "parcelado":
-                    num = item.get("numero_parcela")
-                    tot = item.get("parcelas_total")
-                    parcela_str = f" {num}/{tot}" if num and tot else ""
-                linhas.append(f"  {escopo_icon} {venc_str} • {desc}{parcela_str} — `{fmt(val)}`")
+                data_ref = _get_ref_date(item) or _to_date(item.get("data_transacao"))
+                data_str = data_ref.strftime("%d/%m/%Y") if data_ref else "-"
+
+                linhas.append(f"  {escopo_icon} {data_str} • {desc} — `{fmt(val)}`")
             linhas.append("")
 
     texto_final = "\n".join(linhas)

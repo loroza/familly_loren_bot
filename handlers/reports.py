@@ -192,7 +192,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
 
     # Entradas
     linhas.append("📈 *ENTRADAS*")
-    linhas.append(f"`{fmt(data['total_receitas'])}`")
+    linhas.append(f"Total lançado: `{fmt(data['total_receitas'])}`\n")
     if data["grupos_receitas"]:
         for cat, val in sorted(data["grupos_receitas"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_receitas"] * 100) if data["total_receitas"] > 0 else 0
@@ -241,7 +241,8 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         parcelados_sorted = sorted(parcelados, key=lambda r: _get_ref_date(r) or date(1970, 1, 1))
         for p in parcelados_sorted:
             desc_raw = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
-            desc = _escape_md(desc_raw)
+            # desc = _escape_md(desc_raw)
+            desc = desc_raw
             venc = _to_date(p.get("data_vencimento") or p.get("vencimento") or p.get("data_venc") or p.get("venc") or p.get("vencimento_parcela"))
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
@@ -471,7 +472,8 @@ async def show_detail(callback: CallbackQuery):
                 linhas.append(f"📂 *{_escape_md(cat.title())}*")
                 items = sorted(grupos_rec[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
                 for item in items:
-                    desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
+                    # desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
+                    desc = item.get("descricao") or item.get("subcategoria_text") or "-"
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"

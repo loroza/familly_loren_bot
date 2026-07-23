@@ -476,8 +476,8 @@ async def show_detail(callback: CallbackQuery):
                     desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
-                    data_str = data_ref.strftime("%d/%m/%Y") if data_ref else "-"
-                    linhas.append(f"  🧾 {data_str} • {desc} — `{fmt(val)}`")
+                    data_str = data_ref.strftime("%d/%m") if data_ref else "-"
+                    linhas.append(f"  {escopo_icon} {data_str} • {desc} — `{fmt(val)}`")
                 linhas.append("")
 
         # Despesas
@@ -496,13 +496,13 @@ async def show_detail(callback: CallbackQuery):
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                     escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
-                    data_str = data_ref.strftime("%d/%m/%Y") if data_ref else "-"
+                    data_str = data_ref.strftime("%d/%m") if data_ref else "-"
                     parcela_str = ""
                     if (item.get("tipo_pagamento") or "") == "parcelado":
                         num = item.get("numero_parcela")
                         tot = item.get("parcelas_total")
                         parcela_str = f"({num}/{tot}) " if num and tot else ""
-                    linhas.append(f"  {escopo_icon} {data_str} • {parcela_str}{desc} — `{fmt(val)}`")
+                    linhas.append(f"  {escopo_icon} {data_str} • {desc} — `{fmt(val)}`")
                 linhas.append("")
 
     texto_final = "\n".join(linhas)

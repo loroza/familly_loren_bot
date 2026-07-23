@@ -218,9 +218,9 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         linhas.append("🏠 *Compartilhadas* _(50% do total)_")
         for cat, val in sorted(data["grupos_ambos"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_ambos"] * 100) if data["total_ambos"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► _*{pct:.0f}%*_")
-        linhas.append(f"  Total casal: `{fmt(data['total_ambos'])}`")
-        linhas.append(f"  Sua parte: `{fmt(data['total_ambos'] * 0.5)}`")
+            linhas.append(f"  • {_escape_md(cat.title())}: _`{fmt(val)}`_ ► *_{pct:.0f}%_")
+        linhas.append(f"  Total casal: _`{fmt(data['total_ambos'])}`_")
+        linhas.append(f"  Sua parte: _`{fmt(data['total_ambos'] * 0.5)}`_")
         linhas.append("")
 
     # Parcelas do mês (manter bloco informativo)
@@ -246,7 +246,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
             val_parcela = p.get("valor_parcela") or float(p.get("valor", 0) or 0)
-            linhas.append(f"  {escopo_icon} {venc_str} • {desc} `_{fmt(val_parcela)}_`")
+            linhas.append(f"  {escopo_icon} {venc_str} • {desc} _`{fmt(val_parcela)}`_")
         linhas.append("")
 
     linhas.append("⚖️ *SOBRA LÍQUIDA*")

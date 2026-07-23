@@ -22,7 +22,7 @@ MESES_PT = [
 
 
 def fmt(valor: float) -> str:
-    return f"R$ {valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"_{valor:,.2f}_".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _to_date(value):
@@ -196,7 +196,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
     if data["grupos_receitas"]:
         for cat, val in sorted(data["grupos_receitas"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_receitas"] * 100) if data["total_receitas"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` _{pct:.0f}%_")
+            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► _*{pct:.0f}%*_")
     else:
         linhas.append("  _Nenhuma receita registrada_")
     linhas.append("")
@@ -211,14 +211,14 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         linhas.append("👤 *Pessoais*")
         for cat, val in sorted(data["grupos_pessoal"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_pessoal"] * 100) if data["total_pessoal"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` _{pct:.0f}%_")
+            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► _*{pct:.0f}%*_")
         linhas.append("")
 
     if data["grupos_ambos"]:
         linhas.append("🏠 *Compartilhadas* _(50% do total)_")
         for cat, val in sorted(data["grupos_ambos"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_ambos"] * 100) if data["total_ambos"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` _{pct:.0f}%_")
+            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► _*{pct:.0f}%*_")
         linhas.append(f"  Total casal: `{fmt(data['total_ambos'])}`")
         linhas.append(f"  Sua parte: `{fmt(data['total_ambos'] * 0.5)}`")
         linhas.append("")
@@ -242,8 +242,6 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         for p in parcelados_sorted:
             desc_raw = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
             desc = _escape_md(desc_raw)
-            num = p.get("numero_parcela", 1)
-            total_p = p.get("parcelas_total", 1)
             venc = _to_date(p.get("data_vencimento") or p.get("vencimento") or p.get("data_venc") or p.get("venc") or p.get("vencimento_parcela"))
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"

@@ -247,7 +247,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
             val_parcela = p.get("valor_parcela") or float(p.get("valor", 0) or 0)
-            linhas.append(f"  {escopo_icon} {venc_str} • {desc} `{fmt(val_parcela)}`")
+            linhas.append(f"  {escopo_icon} {venc_str} • `{fmt(val_parcela)}` {desc}")
         linhas.append("")
 
     linhas.append("⚖️ *SOBRA LÍQUIDA*")
@@ -477,7 +477,7 @@ async def show_detail(callback: CallbackQuery):
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"
-                    linhas.append(f"  {escopo_icon} {data_str} • {desc} — `{fmt(val)}`")
+                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {desc}")
                 linhas.append("")
 
         # Despesas
@@ -502,7 +502,7 @@ async def show_detail(callback: CallbackQuery):
                         num = item.get("numero_parcela")
                         tot = item.get("parcelas_total")
                         parcela_str = f"({num}/{tot}) " if num and tot else ""
-                    linhas.append(f"  {escopo_icon} {data_str} • {desc} — `{fmt(val)}`")
+                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {desc}")
                 linhas.append("")
 
     texto_final = "\n".join(linhas)

@@ -22,7 +22,7 @@ MESES_PT = [
 
 
 def fmt(valor: float) -> str:
-    return f"_{valor:,.2f}_".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _to_date(value):
@@ -184,9 +184,9 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
 
     # Fluxo de caixa (sprints)
     linhas.append("💰 *FLUXO DE CAIXA (Sprints)*")
-    linhas.append(f"✅ Realizado:\n    📥 `{fmt(data.get('realizado_receita', 0.0))}` recebido\n    📤 `{fmt(data.get('realizado_gasto', 0.0))}` pago")
+    linhas.append(f"✅ Realizado:\n        📥 `{fmt(data.get('realizado_receita', 0.0))}` recebido\n        📤 `{fmt(data.get('realizado_gasto', 0.0))}` pago")
     linhas.append(f"💎 *Saldo em conta:* `{fmt(data.get('saldo_atual_caixa', 0.0))}`")
-    linhas.append(f"⏳ Previsto:\n    📥 `{fmt(data.get('previsto_receita', 0.0))}` a receber\n    📤 `{fmt(data.get('previsto_gasto', 0.0))}` a pagar")
+    linhas.append(f"\n⏳ Previsto:\n        📥 `{fmt(data.get('previsto_receita', 0.0))}` a receber\n        📤 `{fmt(data.get('previsto_gasto', 0.0))}` a pagar")
     linhas.append(f"🏁 *Projeção fim do mês:* `{fmt(data.get('saldo_projetado', 0.0))}`")
     linhas.append("")
 

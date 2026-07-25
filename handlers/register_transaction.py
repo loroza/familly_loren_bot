@@ -114,13 +114,13 @@ async def save_transaction(message: Message, state: FSMContext):
                 f"💰 R$ {payload['valor']:.2f}\n"
                 f"🔖 Escopo: {payload['escopo']}\n"
                 f"📝 Descrição: {payload['descricao'] or '-'}\n"
-                f"📅 Data da transação: {data_transacao_texto}\n"
-                f"🗓️ Data de vencimento: {data_vencimento_texto}\n"
+                f"📅 Data da transação: {parse_date_to_iso(data_transacao_texto).strftime('%d/%m/%Y')}\n"
+                f"🗓️ Data de vencimento: {parse_date_to_iso(data_vencimento_texto).strftime('%d/%m/%Y')}\n"
                 f"💳 Forma de pagamento: {payload['forma_pagamento'] or '-'}\n"
                 f"📦 Tipo de pagamento: {payload['tipo_pagamento'] or '-'}\n"
                 f"🔢 Parcelas: {parcelas_texto}\n"
                 f"📌 Status: {status_texto}\n"
-                f"💵 Data de pagamento: {data_pagamento_texto}"
+                f"💵 Data de pagamento: {parse_date_to_iso(data_pagamento_texto).strftime('%d/%m/%Y')}"
             )
 
             for user_id in authorized_ids:
@@ -136,13 +136,13 @@ async def save_transaction(message: Message, state: FSMContext):
             f"💰 R$ {payload['valor']:.2f}\n"
             f"🔖 Escopo: {payload['escopo']}\n"
             f"📝 Descrição: {payload['descricao'] or '-'}\n"
-            f"📅 Data da transação: {data_transacao_texto}\n"
-            f"🗓️ Data de vencimento: {data_vencimento_texto}\n"
+            f"📅 Data da transação: {parse_date_to_iso(data_transacao_texto).strftime('%d/%m/%Y')}\n"
+            f"🗓️ Data de vencimento: {parse_date_to_iso(data_vencimento_texto).strftime('%d/%m/%Y')}\n"
             f"💳 Forma de pagamento: {payload['forma_pagamento'] or '-'}\n"
             f"📦 Tipo de pagamento: {payload['tipo_pagamento'] or '-'}\n"
             f"🔢 Parcelas: {parcelas_texto}\n"
             f"📌 Status: {status_texto}\n"
-            f"💵 Data de pagamento: {data_pagamento_texto}",
+            f"💵 Data de pagamento: {parse_date_to_iso(data_pagamento_texto).strftime('%d/%m/%Y')}",
             reply_markup=keyboards.main_menu_keyboard()
         )
 

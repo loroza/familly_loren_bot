@@ -118,7 +118,7 @@ def _escape_md(text: str) -> str:
     """
     if text is None:
         return ""
-    return _md_esc_re.sub(r'\\\1', str(text))
+    return str(_md_esc_re.sub(r'\\\1', str(text))).replace("\(", "(").replace("\)", ")")
 
 
 # Helpers para edição de valores
@@ -484,7 +484,7 @@ async def show_detail(callback: CallbackQuery):
     else:
         # Receitas
         if receitas:
-            linhas.append("📥 *RECEITAS*")
+            linhas.append("📥 *RECEITAS*\n")
             grupos_rec: dict[str, list] = {}
             for r in receitas:
                 cat = (r.get("categoria_text") or "Outros").strip()
@@ -498,7 +498,7 @@ async def show_detail(callback: CallbackQuery):
                     desc_raw = item.get("descricao") or item.get("subcategoria_text") or "-"
                     desc = _escape_md(desc_raw)
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
-                    data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
+                    data_ref = _to_date(item.get("data_vencimento")) or _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"
                     escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                     linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {desc}")
@@ -506,7 +506,7 @@ async def show_detail(callback: CallbackQuery):
 
         # Despesas
         if despesas:
-            linhas.append("📤 *DESPESAS*")
+            linhas.append("📤 *DESPESAS*\n")
             grupos_desp: dict[str, list] = {}
             for r in despesas:
                 cat = (r.get("categoria_text") or "Outros").strip()
@@ -519,7 +519,7 @@ async def show_detail(callback: CallbackQuery):
                     desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                     escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
-                    data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
+                    data_ref = _to_date(item.get("data_vencimento")) or _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"
                     parcela_str = ""
                     if (item.get("tipo_pagamento") or "") == "parcelado":
@@ -567,11 +567,9 @@ async def show_pending(callback: CallbackQuery):
             f"💰 `{fmt(float(item.get('valor') or 0))}`\n"
             f"🔖 Escopo: {_escape_md(item.get('escopo', '-'))}\n"
             f"📝 Descrição: {_escape_md(item.get('descricao') or '-')}\n"
-            f"📅 Data da transação: {_escape_md(str(item.get('data_transacao')) or '-')}\n"
-            f"🗓️ Data de referência: {_escape_md(data_venc_texto)}\n"
+            f"🗓️ Data de vencimento: {_escape_md(data_venc_texto)}\n"
             f"💳 Forma de pagamento: {_escape_md(item.get('forma_pagamento') or '-')}\n"
             f"📦 Tipo de pagamento: {_escape_md(item.get('tipo_pagamento') or '-')}\n"
-            f"📌 Status: {status_texto}\n"
         )
 
         # usar keyword-only args para evitar erro do pydantic/aiogram

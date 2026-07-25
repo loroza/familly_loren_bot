@@ -492,7 +492,7 @@ async def show_detail(callback: CallbackQuery):
 
             for cat in sorted(grupos_rec.keys()):
                 linhas.append(f"📂 *{_escape_md(cat.title())}*")
-                items = sorted(grupos_rec[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
+                items = sorted(grupos_rec[cat], key=lambda x: _to_date(x.get("data_pagamento")) or _to_date(x.get("data_vencimento")) or _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
                 for item in items:
                     # desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
                     desc_raw = item.get("descricao") or item.get("subcategoria_text") or "-"
@@ -514,7 +514,7 @@ async def show_detail(callback: CallbackQuery):
 
             for cat in sorted(grupos_desp.keys()):
                 linhas.append(f"📂 *{_escape_md(cat.title())}*")
-                items = sorted(grupos_desp[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
+                items = sorted(grupos_desp[cat], key=lambda x: _to_date(x.get("data_pagamento")) or _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
                 for item in items:
                     desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)

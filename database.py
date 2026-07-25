@@ -234,7 +234,8 @@ async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict
         "previsto_gasto": round(previsto_gasto, 2),
         "saldo_atual_caixa": round(realizado_receita - realizado_gasto, 2),
         "saldo_projetado": round((realizado_receita + previsto_receita) - (realizado_gasto + previsto_gasto), 2),
-        "total_pessoal": round(total_pessoal, 2), "total_ambos": round(total_ambos, 2)
+        "total_pessoal": round(total_pessoal, 2),
+        "total_ambos": round(total_ambos, 2)
     }
 
 
@@ -247,7 +248,7 @@ async def get_previous_balance(user_id: str, year: int, month: int) -> float:
     target = date(year, month, 1)
     saldo = 0.0
     for r in todas:
-        d = _to_date(r.get("data_vencimento")) or _to_date(r.get("data_transacao"))
+        d = _to_date(r.get("data_pagamento")) or _to_date(r.get("data_vencimento")) or _to_date(r.get("data_transacao"))
         if not d or d >= target:
             continue
         val = float(r.get("valor") or 0.0)

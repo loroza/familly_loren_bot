@@ -177,7 +177,7 @@ async def get_monthly_summary(telegram_user_id: str, ano: int, mes: int) -> dict
         """
         out = []
         for r in rows:
-            d = _to_date(r.get("data_vencimento")) or _to_date(r.get("data_transacao"))
+            d = _to_date(r.get("data_pagamento")) or _to_date(r.get("data_vencimento")) or _to_date(r.get("data_transacao"))
             if d and d.year == ano and d.month == mes:
                 out.append(r)
         return out

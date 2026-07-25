@@ -113,14 +113,60 @@ async def insert_transacao(payload: dict):
             )
 
 
-async def update_transacao_to_realizado(transacao_id: int, data_pagamento: date):
+async def update_transacao_to_realizado(transacao_id: int, data_pagamento: date, payer_id: str | None = None) -> dict:
+    """
+    Marca pagamento.
+    - Para escopo != 'ambos' ou sem payer_id: comporta-se como antes (marca toda a transação como 'realizado').
+    - Para escopo == 'ambos' com payer_id: adiciona payer_id ao array paid_by.
+      Se após a adição houver >= 2 confirmadores, marca status='realizado' (transação 100% quitada).
+    Retorna dict: {"fully_paid": bool, "paid_by": [...]} para o handler poder notificar.
+    """
     async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT escopo, paid_by FROM transacoes WHERE id = $1", transacao_id)
+        if not row:
+            raise RuntimeError("Transação não encontrada")
+
+        escopo = row.get("escopo")
+        paid_by = row.get("paid_by") or []
+
+        # Caso não seja 'ambos' ou não haja payer_id fornecido -> comportamento clássico
+        if escopo != "ambos" or not payer_id:
+            await conn.execute("""
+                UPDATE transacoes
+                SET status = 'realizado',
+                    data_pagamento = $1
+                WHERE id = $2
+            """, data_pagamento, transacao_id)
+            return {"fully_paid": True, "paid_by": []}
+
+        # escopo == 'ambos' e payer_id informado -> confirmar apenas a parte do payer
+        payer_id = str(payer_id)
+        if payer_id in paid_by:
+            # já confirmado por ele anteriormente
+            return {"fully_paid": False, "paid_by": paid_by}
+
+        # adicionar payer ao array
+        new_paid_by = paid_by + [payer_id]
+
+        # salvar paid_by e paid_dates (opcional)
         await conn.execute("""
             UPDATE transacoes
-            SET status = 'realizado',
-                data_pagamento = $1
+            SET paid_by = $1
             WHERE id = $2
-        """, data_pagamento, transacao_id)
+        """, new_paid_by, transacao_id)
+
+        # se agora temos 2 (ou mais) confirmadores, marca realizado
+        if len(new_paid_by) >= 2:
+            await conn.execute("""
+                UPDATE transacoes
+                SET status = 'realizado',
+                    data_pagamento = $1,
+                    paid_by = $2
+                WHERE id = $3
+            """, data_pagamento, new_paid_by, transacao_id)
+            return {"fully_paid": True, "paid_by": new_paid_by}
+
+        return {"fully_paid": False, "paid_by": new_paid_by}
 
 
 async def get_pendentes_by_month(user_id: str, ano: int, mes: int):
@@ -134,6 +180,8 @@ async def get_pendentes_by_month(user_id: str, ano: int, mes: int):
                   OR
                   (data_vencimento IS NULL AND EXTRACT(YEAR FROM data_transacao) = $2 AND EXTRACT(MONTH FROM data_transacao) = $3)
               )
+              -- se for 'ambos' e o usuário já confirmou, não é pendente para ele
+              AND NOT (escopo = 'ambos' AND $1 = ANY(paid_by))
             ORDER BY COALESCE(data_vencimento, data_transacao)
         """, str(user_id), ano, mes)
     return [dict(r) for r in rows]

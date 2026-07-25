@@ -654,14 +654,35 @@ async def realizar_pagamento(callback: CallbackQuery):
     hoje = date.today()
 
     try:
-        await database.update_transacao_to_realizado(transacao_id, hoje)
-        # Tentar editar a mensagem original para incluir confirmação
-        try:
-            # Não forçar parse_mode aqui para evitar reparse de entidades já presentes na mensagem
-            await callback.message.edit_text((callback.message.text or "") + "\n\n✅ Pagamento realizado com sucesso!")
-        except Exception:
-            # se não for possível editar (mensagem muito antiga, etc.), apenas enviar nova mensagem
-            await callback.message.answer("✅ *Pagamento realizado com sucesso!*", parse_mode="Markdown")
+        payer_id = str(callback.from_user.id)
+        res = await database.update_transacao_to_realizado(transacao_id, hoje, payer_id)
+
+        if res.get("fully_paid"):
+            # comportamento atual quando o pagamento ficou 100% quitado
+            try:
+                await callback.message.edit_text((callback.message.text or "") + "\n\n✅ Pagamento realizado com sucesso!")
+            except Exception:
+                await callback.message.answer("✅ *Pagamento realizado com sucesso!*", parse_mode="Markdown")
+        else:
+            # pagador confirmou apenas a sua parte — notificar o pagador e avisar o(s) parceiro(s)
+            await callback.message.answer("✅ Sua parte foi marcada como paga. Aguardando confirmação da outra parte.", parse_mode="Markdown")
+
+            # notificar outros usuários autorizados (ex.: sua parceira)
+            try:
+                others = await database.get_all_authorized_users()
+                # enviar para todos exceto o pagador
+                for uid in others:
+                    if uid == payer_id:
+                        continue
+                    try:
+                        await callback.bot.send_message(
+                            int(uid),
+                            f"ℹ️ {callback.from_user.full_name} marcou a parte dele(a) como paga na transação `{transacao_id}`.\nAinda falta a sua parte. Por favor, confirme quando você pagar.",
+                        )
+                    except Exception:
+                        logger.exception("Não foi possível notificar o parceiro")
+            except Exception:
+                logger.exception("Erro ao buscar usuários autorizados para notificação")
     except Exception:
         logger.exception("Erro ao realizar pagamento")
         await callback.message.answer("❌ Erro ao atualizar o pagamento. Tente novamente.")

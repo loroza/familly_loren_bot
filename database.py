@@ -259,3 +259,12 @@ async def get_previous_balance(user_id: str, year: int, month: int) -> float:
             else:
                 saldo -= val
     return round(saldo, 2)
+
+async def update_transacao_valor(transacao_id: int, novo_valor: float) -> None:
+    """
+    Atualiza o valor de uma transação pendente no banco.
+    Deve lançar exceção se ocorrer erro.
+    """
+    # Exemplo usando asyncpg / SQL executável — adapte à sua camada de DB
+    query = "UPDATE transacoes SET valor = $1 WHERE id = $2"
+    await db_pool.execute(query, novo_valor, transacao_id)

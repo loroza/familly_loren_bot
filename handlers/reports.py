@@ -91,8 +91,8 @@ def _belongs_to_month(item: dict, ano: int, mes: int) -> bool:
     if not item:
         return False
 
-    # 1) data_transacao
-    dt = _to_date(item.get("data_transacao") or item.get("transacao") or item.get("data_transacao_date"))
+    # 1) data_vencimento / vencimento_parcela
+    dt = _to_date(item.get("data_vencimento") or item.get("vencimento") or item.get("data_venc") or item.get("venc") or item.get("vencimento_parcela"))
     if dt:
         return dt.year == ano and dt.month == mes
 
@@ -100,11 +100,12 @@ def _belongs_to_month(item: dict, ano: int, mes: int) -> bool:
     dt = _to_date(item.get("data_pagamento") or item.get("data_pagamento_date") or item.get("pagamento") or item.get("data_pago"))
     if dt:
         return dt.year == ano and dt.month == mes
-
-    # 3) data_vencimento / vencimento_parcela
-    dt = _to_date(item.get("data_vencimento") or item.get("vencimento") or item.get("data_venc") or item.get("venc") or item.get("vencimento_parcela"))
+    
+    # 3) data_transacao
+    dt = _to_date(item.get("data_transacao") or item.get("transacao") or item.get("data_transacao_date"))
     if dt:
         return dt.year == ano and dt.month == mes
+
 
     return False
 

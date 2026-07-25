@@ -260,8 +260,10 @@ async def get_previous_balance(user_id: str, year: int, month: int) -> float:
                 saldo -= val
     return round(saldo, 2)
 
+
 async def update_transacao_valor(transacao_id: int, novo_valor: float) -> None:
     query = "UPDATE transacoes SET valor = $1 WHERE id = $2"
-    if db_pool is None:
-        raise RuntimeError("db_pool não inicializado")
-    await db_pool.execute(query, novo_valor, transacao_id)
+    if pool is None:
+        raise RuntimeError("pool não inicializado")
+    async with pool.acquire() as conn:
+        await conn.execute(query, novo_valor, transacao_id)

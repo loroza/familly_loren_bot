@@ -4,7 +4,7 @@ import re
 from datetime import date, datetime
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
@@ -22,6 +22,7 @@ MESES_PT = [
 
 
 def fmt(valor: float) -> str:
+    # Retorna o número formatado sem inserir caracteres Markdown.
     return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
@@ -112,6 +113,7 @@ def _belongs_to_month(item: dict, ano: int, mes: int) -> bool:
 # --- Markdown escape helper (para parse_mode="Markdown") ---
 _md_esc_re = re.compile(r'([_\*\[\]\(\)`])')
 
+
 def _escape_md(text: str) -> str:
     """Escapa caracteres que quebram o parse de Markdown do Telegram
     para strings dinâmicas vindas do banco.
@@ -121,26 +123,35 @@ def _escape_md(text: str) -> str:
     return _md_esc_re.sub(r'\\\1', str(text))
 
 
-# Helpers para edição de valores
-def parse_money_to_float(text: str) -> float:
-    """Converte strings monetárias comuns (ex: 'R$ 1.234,56', '1234.56', '1.234,56') para float.
-    Lança ValueError em caso de formato inválido.
+def _is_safe_literal(text: str) -> bool:
+    """Retorna True se o texto for "apenas literal" (não contém caracteres Markdown).
+    Útil para determinar se podemos exibir sem escapes.
     """
     if text is None:
-        raise ValueError("texto vazio")
-    s = str(text).strip()
-    # remover símbolo de moeda e espaços
-    s = s.replace("R$", "").replace("r$", "").replace(" ", "")
-    # Se houver tanto '.' quanto ',', assumimos '.' como separador de milhares e ',' decimal
-    if "." in s and "," in s:
-        s = s.replace('.', '')
-        s = s.replace(',', '.')
-    else:
-        # vírgula -> decimal
-        if "," in s:
-            s = s.replace(',', '.')
-    return float(s)
+        return True
+    return not bool(re.search(r'[_\*\[\]\(\)`]', str(text)))
 
+
+def _literal(text: str) -> str:
+    """Retorna o texto pronto para inserir na mensagem sem as barras de escape
+    adicionadas por _escape_md. Só usar quando se quer exibir o texto literalmente
+    (por exemplo: descrições que contenham parênteses de parcela).
+    Se o texto contiver caracteres Markdown perigosos, devolve a versão escapada.
+    """
+    if text is None:
+        return ""
+    s = str(text)
+    # Se tiver caracteres perigosos, devolve a versão escapada para evitar parse errors.
+    if re.search(r'[_\*\[\]\(\)`]', s):
+        # Se o usuário realmente quer que apareça sem escapes e você tem controle,
+        # pode optar por remover manualmente apenas os backslashes, mas aqui escolhemos
+        # devolver a versão escapada para segurança, exceto nos casos onde queremos literal:
+        # Para preservar comportamento, removemos apenas backslashes adicionados (se já existir)
+        # mas normalmente chamamos _literal para textos onde queremos a versão sem backslashes.
+        # Neste helper, devolvemos a string sem alterar se detectarmos caracteres perigosos,
+        # para evitar criar uma mensagem inválida.
+        return _escape_md(s)
+    return s
 
 
 def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
@@ -214,11 +225,11 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
 
     # Entradas
     linhas.append("📈 *ENTRADAS*")
-    linhas.append(f"Total lançado: `{fmt(data['total_receitas'])}`\n")
+    linhas.append(f"`{fmt(data['total_receitas'])}`")
     if data["grupos_receitas"]:
         for cat, val in sorted(data["grupos_receitas"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_receitas"] * 100) if data["total_receitas"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► ***{pct:.0f}%***")
+            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► *{pct:.0f}%*")
     else:
         linhas.append("  _Nenhuma receita registrada_")
     linhas.append("")
@@ -233,14 +244,14 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         linhas.append("👤 *Pessoais*")
         for cat, val in sorted(data["grupos_pessoal"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_pessoal"] * 100) if data["total_pessoal"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► ***{pct:.0f}%***")
+            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► *{pct:.0f}%*")
         linhas.append("")
 
     if data["grupos_ambos"]:
         linhas.append("🏠 *Compartilhadas* _(50% do total)_")
         for cat, val in sorted(data["grupos_ambos"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_ambos"] * 100) if data["total_ambos"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► ***{pct:.0f}%***")
+            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► *{pct:.0f}%*")
         linhas.append(f"  Total casal: `{fmt(data['total_ambos'])}`")
         linhas.append(f"  Sua parte: `{fmt(data['total_ambos'] * 0.5)}`")
         linhas.append("")
@@ -263,12 +274,17 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         parcelados_sorted = sorted(parcelados, key=lambda r: _get_ref_date(r) or date(1970, 1, 1))
         for p in parcelados_sorted:
             desc_raw = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
-            desc = _escape_md(desc_raw)
+            desc = _literal(desc_raw)
             venc = _to_date(p.get("data_vencimento") or p.get("vencimento") or p.get("data_venc") or p.get("venc") or p.get("vencimento_parcela"))
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
             val_parcela = p.get("valor_parcela") or float(p.get("valor", 0) or 0)
-            linhas.append(f"  {escopo_icon} {venc_str} • `{fmt(val_parcela)}` {desc}")
+            parcela_info = ""
+            if (p.get("tipo_pagamento") or "") == "parcelado":
+                num = p.get("numero_parcela")
+                tot = p.get("parcelas_total")
+                parcela_info = f" ({num}/{tot})" if num and tot else ""
+            linhas.append(f"  {escopo_icon} {venc_str} • {desc}{parcela_info} `{fmt(val_parcela)}`")
         linhas.append("")
 
     linhas.append("⚖️ *SOBRA LÍQUIDA*")
@@ -322,7 +338,6 @@ def _generate_insights(data: dict, saldo_total: float = None) -> list[str]:
 class ReportState(StatesGroup):
     waiting_for_month = State()
     waiting_for_year = State()
-    editing_value = State()
 
 
 # ─── Menu de Relatórios ───
@@ -494,14 +509,12 @@ async def show_detail(callback: CallbackQuery):
                 linhas.append(f"📂 *{_escape_md(cat.title())}*")
                 items = sorted(grupos_rec[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
                 for item in items:
-                    # desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
-                    desc_raw = item.get("descricao") or item.get("subcategoria_text") or "-"
-                    desc = _escape_md(desc_raw)
+                    desc = _literal(item.get("descricao") or item.get("subcategoria_text") or "-")
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
+                    escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"
-                    escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
-                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {desc}")
+                    linhas.append(f"  {escopo_icon} {data_str} • {desc} — `{fmt(val)}`")
                 linhas.append("")
 
         # Despesas
@@ -516,7 +529,7 @@ async def show_detail(callback: CallbackQuery):
                 linhas.append(f"📂 *{_escape_md(cat.title())}*")
                 items = sorted(grupos_desp[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
                 for item in items:
-                    desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
+                    desc = _literal(item.get("descricao") or item.get("subcategoria_text") or "-")
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                     escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
@@ -526,7 +539,7 @@ async def show_detail(callback: CallbackQuery):
                         num = item.get("numero_parcela")
                         tot = item.get("parcelas_total")
                         parcela_str = f"({num}/{tot}) " if num and tot else ""
-                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {parcela_str}{desc}")
+                    linhas.append(f"  {escopo_icon} {data_str} • {desc} — `{fmt(val)}`")
                 linhas.append("")
 
     texto_final = "\n".join(linhas)
@@ -563,89 +576,27 @@ async def show_pending(callback: CallbackQuery):
 
         msg = (
             f"⏳ *TRANSAÇÃO PREVISTA*\n\n"
-            f"📂 {_escape_md(item.get('categoria_text', '-'))} › {_escape_md(item.get('subcategoria_text', '-'))}\n"
+            f"📂 {_literal(item.get('categoria_text', '-'))} › {_literal(item.get('subcategoria_text', '-'))}\n"
             f"💰 `{fmt(float(item.get('valor') or 0))}`\n"
-            f"🔖 Escopo: {_escape_md(item.get('escopo', '-'))}\n"
-            f"📝 Descrição: {_escape_md(item.get('descricao') or '-')}\n"
-            f"📅 Data da transação: {_escape_md(str(item.get('data_transacao')) or '-')}\n"
+            f"🔖 Escopo: {_literal(item.get('escopo', '-'))}\n"
+            f"📝 Descrição: {_literal(item.get('descricao') or '-')}\n"
+            f"📅 Data da transação: {_literal(str(item.get('data_transacao')) or '-')}\n"
             f"🗓️ Data de referência: {_escape_md(data_venc_texto)}\n"
-            f"💳 Forma de pagamento: {_escape_md(item.get('forma_pagamento') or '-')}\n"
-            f"📦 Tipo de pagamento: {_escape_md(item.get('tipo_pagamento') or '-')}\n"
+            f"💳 Forma de pagamento: {_literal(item.get('forma_pagamento') or '-')}\n"
+            f"📦 Tipo de pagamento: {_literal(item.get('tipo_pagamento') or '-')}\n"
             f"📌 Status: {status_texto}\n"
-        )
-
-        # usar keyword-only args para evitar erro do pydantic/aiogram
-        markup = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(text="✅ Efetuar pagamento", callback_data=f"realizar:{item['id']}"),
-                    InlineKeyboardButton(text="✏️ Editar valor", callback_data=f"editar_valor:{item['id']}")
-                ]
-            ]
         )
 
         await callback.message.answer(
             msg,
             parse_mode="Markdown",
-            reply_markup=markup
+            reply_markup=keyboards.realizar_pagamento_inline_keyboard(item["id"])
         )
 
     await callback.answer()
 
 
 # ─── Callback: Realizar Pagamento ───
-
-
-# --- Edição de valor de transação (pendentes) ---
-@router.callback_query(F.data.startswith("editar_valor:"))
-async def editar_valor_callback(callback: CallbackQuery, state: FSMContext):
-    _, transacao_id = callback.data.split(":")
-    try:
-        transacao_id = int(transacao_id)
-    except Exception:
-        await callback.answer()
-        return
-
-    await state.update_data(editing_transacao_id=transacao_id)
-    await state.set_state(ReportState.editing_value)
-    await callback.message.answer(
-        "✏️ Envie o novo valor para esta transação (ex: 123,45 ou R$ 123,45).\nDigite 'cancelar' para abortar."
-    )
-    await callback.answer()
-
-
-@router.message(StateFilter(ReportState.editing_value))
-async def handle_edit_value(message: Message, state: FSMContext):
-    texto = (message.text or "").strip()
-
-    if texto.lower() in ("cancelar", "cancel", "esc" ):
-        await state.clear()
-        await message.answer("✖️ Edição cancelada.")
-        return
-
-    try:
-        novo_valor = parse_money_to_float(texto)
-    except Exception:
-        await message.answer("❌ Formato inválido. Envie um valor como `123,45` ou `R$ 123,45`.", parse_mode="Markdown")
-        return
-
-    dados = await state.get_data()
-    transacao_id = dados.get("editing_transacao_id")
-    if not transacao_id:
-        await message.answer("❌ Erro interno: transação não encontrada no estado. Tente novamente.")
-        await state.clear()
-        return
-
-    try:
-        # Chamando a função do banco para atualizar o valor
-        await database.update_transacao_valor(int(transacao_id), float(novo_valor))
-        await message.answer(f"✅ Valor atualizado para `{fmt(novo_valor)}`.", parse_mode="Markdown")
-    except Exception:
-        logger.exception("Erro ao atualizar valor da transação")
-        await message.answer("❌ Erro ao atualizar o valor. Tente novamente mais tarde.")
-
-    await state.clear()
-
 
 @router.callback_query(F.data.startswith("realizar:"))
 async def realizar_pagamento(callback: CallbackQuery):
@@ -696,7 +647,7 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
         for cat, items in categories.items():
             output.append(f"\n  📂 *{_escape_md(cat)}*")
             for item in items:
-                desc = _escape_md((item.get("descricao") or item.get("subcategoria_text") or "-").title())
+                desc = _literal((item.get("descricao") or item.get("subcategoria_text") or "-").title())
                 val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
                 escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                 parcela_str = ""

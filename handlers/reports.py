@@ -4,7 +4,7 @@ import re
 from datetime import date, datetime
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
@@ -110,8 +110,7 @@ def _belongs_to_month(item: dict, ano: int, mes: int) -> bool:
 
 
 # --- Markdown escape helper (para parse_mode="Markdown") ---
-# NOTE: removi parênteses da regex para evitar inserir backslashes em ( e )
-_md_esc_re = re.compile(r'([_\*\[\]`])')
+_md_esc_re = re.compile(r'([_\*\[\]\(\)`])')
 
 def _escape_md(text: str) -> str:
     """Escapa caracteres que quebram o parse de Markdown do Telegram
@@ -120,6 +119,28 @@ def _escape_md(text: str) -> str:
     if text is None:
         return ""
     return _md_esc_re.sub(r'\\\1', str(text))
+
+
+# Helpers para edição de valores
+def parse_money_to_float(text: str) -> float:
+    """Converte strings monetárias comuns (ex: 'R$ 1.234,56', '1234.56', '1.234,56') para float.
+    Lança ValueError em caso de formato inválido.
+    """
+    if text is None:
+        raise ValueError("texto vazio")
+    s = str(text).strip()
+    # remover símbolo de moeda e espaços
+    s = s.replace("R$", "").replace("r$", "").replace(" ", "")
+    # Se houver tanto '.' quanto ',', assumimos '.' como separador de milhares e ',' decimal
+    if "." in s and "," in s:
+        s = s.replace('.', '')
+        s = s.replace(',', '.')
+    else:
+        # vírgula -> decimal
+        if "," in s:
+            s = s.replace(',', '.')
+    return float(s)
+
 
 
 def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
@@ -242,7 +263,8 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         parcelados_sorted = sorted(parcelados, key=lambda r: _get_ref_date(r) or date(1970, 1, 1))
         for p in parcelados_sorted:
             desc_raw = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
-            desc = _escape_md(desc_raw)
+            # desc = _escape_md(desc_raw)
+            desc = desc_raw
             venc = _to_date(p.get("data_vencimento") or p.get("vencimento") or p.get("data_venc") or p.get("venc") or p.get("vencimento_parcela"))
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
@@ -301,6 +323,7 @@ def _generate_insights(data: dict, saldo_total: float = None) -> list[str]:
 class ReportState(StatesGroup):
     waiting_for_month = State()
     waiting_for_year = State()
+    editing_value = State()
 
 
 # ─── Menu de Relatórios ───
@@ -472,9 +495,9 @@ async def show_detail(callback: CallbackQuery):
                 linhas.append(f"📂 *{_escape_md(cat.title())}*")
                 items = sorted(grupos_rec[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
                 for item in items:
-                    desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
+                    # desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
+                    desc = item.get("descricao") or item.get("subcategoria_text") or "-"
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
-                    escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"
                     linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {desc}")
@@ -499,10 +522,10 @@ async def show_detail(callback: CallbackQuery):
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"
                     parcela_str = ""
                     if (item.get("tipo_pagamento") or "") == "parcelado":
-                        num = item.get("numero_parcela")
-                        tot = item.get("parcelas_total")
-                        parcela_str = f"({num}/{tot}) " if num and tot else ""
-                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {parcela_str}{desc}")
+                    num = item.get("numero_parcela")
+                    tot = item.get("parcelas_total")
+                    parcela_str = f"({num}/{tot}) " if num and tot else ""
+                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {desc}")
                 linhas.append("")
 
     texto_final = "\n".join(linhas)
@@ -553,13 +576,65 @@ async def show_pending(callback: CallbackQuery):
         await callback.message.answer(
             msg,
             parse_mode="Markdown",
-            reply_markup=keyboards.realizar_pagamento_inline_keyboard(item["id"])
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton("✅ Efetuar pagamento", callback_data=f"realizar:{item['id']}"), InlineKeyboardButton("✏️ Editar valor", callback_data=f"editar_valor:{item['id']}")]])
         )
 
     await callback.answer()
 
 
 # ─── Callback: Realizar Pagamento ───
+
+
+# --- Edição de valor de transação (pendentes) ---
+@router.callback_query(F.data.startswith("editar_valor:"))
+async def editar_valor_callback(callback: CallbackQuery, state: FSMContext):
+    _, transacao_id = callback.data.split(":")
+    try:
+        transacao_id = int(transacao_id)
+    except Exception:
+        await callback.answer()
+        return
+
+    await state.update_data(editing_transacao_id=transacao_id)
+    await state.set_state(ReportState.editing_value)
+    await callback.message.answer(
+        "✏️ Envie o novo valor para esta transação (ex: 123,45 ou R$ 123,45).\nDigite 'cancelar' para abortar."
+    )
+    await callback.answer()
+
+
+@router.message(StateFilter(ReportState.editing_value))
+async def handle_edit_value(message: Message, state: FSMContext):
+    texto = (message.text or "").strip()
+
+    if texto.lower() in ("cancelar", "cancel", "esc" ):
+        await state.clear()
+        await message.answer("✖️ Edição cancelada.")
+        return
+
+    try:
+        novo_valor = parse_money_to_float(texto)
+    except Exception:
+        await message.answer("❌ Formato inválido. Envie um valor como `123,45` ou `R$ 123,45`.", parse_mode="Markdown")
+        return
+
+    dados = await state.get_data()
+    transacao_id = dados.get("editing_transacao_id")
+    if not transacao_id:
+        await message.answer("❌ Erro interno: transação não encontrada no estado. Tente novamente.")
+        await state.clear()
+        return
+
+    try:
+        # Chamando a função do banco para atualizar o valor
+        await database.update_transacao_valor(int(transacao_id), float(novo_valor))
+        await message.answer(f"✅ Valor atualizado para `{fmt(novo_valor)}`.", parse_mode="Markdown")
+    except Exception:
+        logger.exception("Erro ao atualizar valor da transação")
+        await message.answer("❌ Erro ao atualizar o valor. Tente novamente mais tarde.")
+
+    await state.clear()
+
 
 @router.callback_query(F.data.startswith("realizar:"))
 async def realizar_pagamento(callback: CallbackQuery):

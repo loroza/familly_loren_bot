@@ -110,7 +110,8 @@ def _belongs_to_month(item: dict, ano: int, mes: int) -> bool:
 
 
 # --- Markdown escape helper (para parse_mode="Markdown") ---
-_md_esc_re = re.compile(r'([_\*\[\]\(\)`])')
+# NOTE: removi parênteses da regex para evitar inserir backslashes em ( e )
+_md_esc_re = re.compile(r'([_\*\[\]`])')
 
 def _escape_md(text: str) -> str:
     """Escapa caracteres que quebram o parse de Markdown do Telegram
@@ -241,8 +242,7 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
         parcelados_sorted = sorted(parcelados, key=lambda r: _get_ref_date(r) or date(1970, 1, 1))
         for p in parcelados_sorted:
             desc_raw = p.get("descricao") or p.get("categoria_text") or "Sem descrição"
-            # desc = _escape_md(desc_raw)
-            desc = desc_raw
+            desc = _escape_md(desc_raw)
             venc = _to_date(p.get("data_vencimento") or p.get("vencimento") or p.get("data_venc") or p.get("venc") or p.get("vencimento_parcela"))
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
@@ -472,9 +472,9 @@ async def show_detail(callback: CallbackQuery):
                 linhas.append(f"📂 *{_escape_md(cat.title())}*")
                 items = sorted(grupos_rec[cat], key=lambda x: _to_date(x.get("data_transacao")) or _get_ref_date(x) or date(1970, 1, 1))
                 for item in items:
-                    # desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
-                    desc = item.get("descricao") or item.get("subcategoria_text") or "-"
+                    desc = _escape_md(item.get("descricao") or item.get("subcategoria_text") or "-")
                     val = item.get("valor_parcela") or float(item.get("valor", 0) or 0)
+                    escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                     data_ref = _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"
                     linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {desc}")
@@ -502,7 +502,7 @@ async def show_detail(callback: CallbackQuery):
                         num = item.get("numero_parcela")
                         tot = item.get("parcelas_total")
                         parcela_str = f"({num}/{tot}) " if num and tot else ""
-                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {desc}")
+                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {parcela_str}{desc}")
                 linhas.append("")
 
     texto_final = "\n".join(linhas)

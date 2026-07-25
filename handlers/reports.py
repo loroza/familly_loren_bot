@@ -574,10 +574,20 @@ async def show_pending(callback: CallbackQuery):
             f"📌 Status: {status_texto}\n"
         )
 
+        # usar keyword-only args para evitar erro do pydantic/aiogram
+        markup = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(text="✅ Efetuar pagamento", callback_data=f"realizar:{item['id']}"),
+                    InlineKeyboardButton(text="✏️ Editar valor", callback_data=f"editar_valor:{item['id']}")
+                ]
+            ]
+        )
+
         await callback.message.answer(
             msg,
             parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton("✅ Efetuar pagamento", callback_data=f"realizar:{item['id']}"), InlineKeyboardButton("✏️ Editar valor", callback_data=f"editar_valor:{item['id']}")]])
+            reply_markup=markup
         )
 
     await callback.answer()

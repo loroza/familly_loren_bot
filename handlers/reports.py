@@ -196,54 +196,54 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
 
     if saldo_anterior != 0.0:
         emoji_ant = "🟢" if saldo_anterior >= 0 else "🔴"
-        linhas.append(f"{emoji_ant} *Saldo Anterior:* `{fmt(saldo_anterior)}`")
+        linhas.append(f"{emoji_ant} *Saldo Anterior:* _{fmt(saldo_anterior)}_")
 
     emoji_mes = "🟢" if saldo_mes >= 0 else "🔴"
-    linhas.append(f"{emoji_mes} *Gerado no Mês:* `{fmt(saldo_mes)}`")
+    linhas.append(f"{emoji_mes} *Gerado no Mês:* _{fmt(saldo_mes)}_")
 
     emoji_total = "🟢" if saldo_total >= 0 else "🔴"
-    linhas.append(f"{emoji_total} *SALDO ACUMULADO:* `{fmt(saldo_total)}`")
+    linhas.append(f"{emoji_total} *SALDO ACUMULADO:* _{fmt(saldo_total)}_")
     linhas.append("")
 
     # Fluxo de caixa (sprints)
     linhas.append("💰 *FLUXO DE CAIXA (Sprints)*")
-    linhas.append(f"✅ Realizado:\n        📥 `{fmt(data.get('realizado_receita', 0.0))}` recebido\n        📤 `{fmt(data.get('realizado_gasto', 0.0))}` pago")
-    linhas.append(f"💎 *Saldo em conta:* `{fmt(data.get('saldo_atual_caixa', 0.0))}`")
-    linhas.append(f"\n⏳ Previsto:\n        📥 `{fmt(data.get('previsto_receita', 0.0))}` a receber\n        📤 `{fmt(data.get('previsto_gasto', 0.0))}` a pagar")
-    linhas.append(f"🏁 *Projeção fim do mês:* `{fmt(data.get('saldo_projetado', 0.0))}`")
+    linhas.append(f"✅ Realizado:\n        📥 _{fmt(data.get('realizado_receita', 0.0))}_ recebido\n        📤 _{fmt(data.get('realizado_gasto', 0.0))}_ pago")
+    linhas.append(f"💎 *Saldo em conta:* _{fmt(data.get('saldo_atual_caixa', 0.0))}_")
+    linhas.append(f"\n⏳ Previsto:\n        📥 _{fmt(data.get('previsto_receita', 0.0))}_ a receber\n        📤 _{fmt(data.get('previsto_gasto', 0.0))}_ a pagar")
+    linhas.append(f"🏁 *Projeção fim do mês:* _{fmt(data.get('saldo_projetado', 0.0))}_")
     linhas.append("")
 
     # Entradas
     linhas.append("📈 *ENTRADAS*")
-    linhas.append(f"Total lançado: `{fmt(data['total_receitas'])}`\n")
+    linhas.append(f"Total lançado: _{fmt(data['total_receitas'])}_\n")
     if data["grupos_receitas"]:
         for cat, val in sorted(data["grupos_receitas"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_receitas"] * 100) if data["total_receitas"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► ***{pct:.0f}%***")
+            linhas.append(f"  • {_escape_md(cat.title())}: _{fmt(val)}_ ► ***{pct:.0f}%***")
     else:
         linhas.append("  _Nenhuma receita registrada_")
     linhas.append("")
 
     # Saídas
     linhas.append("📉 *SAÍDAS*")
-    linhas.append(f"Total lançado: _`{fmt(data['total_lancado'])}`_")
-    linhas.append(f"Seu custo real: _`{fmt(data['meu_custo_real'])}`_")
+    linhas.append(f"Total lançado: _{fmt(data['total_lancado'])}_")
+    linhas.append(f"Seu custo real: _{fmt(data['meu_custo_real'])}_")
     linhas.append("")
 
     if data["grupos_pessoal"]:
         linhas.append("👤 *Pessoais*")
         for cat, val in sorted(data["grupos_pessoal"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_pessoal"] * 100) if data["total_pessoal"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► ***{pct:.0f}%***")
+            linhas.append(f"  • {_escape_md(cat.title())}: _{fmt(val)}_ ► ***{pct:.0f}%***")
         linhas.append("")
 
     if data["grupos_ambos"]:
         linhas.append("🏠 *Compartilhadas* _(50% do total)_")
         for cat, val in sorted(data["grupos_ambos"].items(), key=lambda x: -x[1]):
             pct = (val / data["total_ambos"] * 100) if data["total_ambos"] > 0 else 0
-            linhas.append(f"  • {_escape_md(cat.title())}: `{fmt(val)}` ► ***{pct:.0f}%***")
-        linhas.append(f"  Total casal: `{fmt(data['total_ambos'])}`")
-        linhas.append(f"  Sua parte: `{fmt(data['total_ambos'] * 0.5)}`")
+            linhas.append(f"  • {_escape_md(cat.title())}: _{fmt(val)}_ ► ***{pct:.0f}%***")
+        linhas.append(f"  Total casal: _{fmt(data['total_ambos'])}_")
+        linhas.append(f"  Sua parte: _{fmt(data['total_ambos'] * 0.5)}_")
         linhas.append("")
 
     # Parcelas do mês (manter bloco informativo)
@@ -269,11 +269,11 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
             venc_str = venc.strftime("%d/%m") if venc else "-"
             escopo_icon = "🏠" if p.get("escopo") == "ambos" else "👤"
             val_parcela = p.get("valor_parcela") or float(p.get("valor", 0) or 0)
-            linhas.append(f"  {escopo_icon} {venc_str} • `{fmt(val_parcela)}` {desc}")
+            linhas.append(f"  {escopo_icon} {venc_str} • _{fmt(val_parcela)}_ {desc}")
         linhas.append("")
 
     linhas.append("⚖️ *SOBRA LÍQUIDA*")
-    linhas.append(f"`{fmt(saldo_mes)}`")
+    linhas.append(f"_{fmt(saldo_mes)}_")
     linhas.append("")
 
     insights = _generate_insights(data, saldo_total)
@@ -310,12 +310,12 @@ def _generate_insights(data: dict, saldo_total: float = None) -> list[str]:
 
     if todos_grupos:
         maior_cat = max(todos_grupos, key=todos_grupos.get)
-        insights.append(f"📌 Maior gasto: *{_escape_md(maior_cat.title())}* com `{fmt(todos_grupos[maior_cat])}`.")
+        insights.append(f"📌 Maior gasto: *{_escape_md(maior_cat.title())}* com _{fmt(todos_grupos[maior_cat])}_.")
 
     if saldo_total is not None and saldo_total < 0:
-        insights.append(f"🔴 Saldo acumulado negativo de `{fmt(abs(saldo_total))}`. Atenção!")
+        insights.append(f"🔴 Saldo acumulado negativo de _{fmt(abs(saldo_total))}_. Atenção!")
     elif data.get("sobra", 0) < 0:
-        insights.append(f"🔴 Saldo negativo de `{fmt(abs(data.get('sobra', 0)))}`. Atenção!")
+        insights.append(f"🔴 Saldo negativo de _{fmt(abs(data.get('sobra', 0)))}_. Atenção!")
 
     return insights
 
@@ -502,7 +502,7 @@ async def show_detail(callback: CallbackQuery):
                     data_ref = _to_date(item.get("data_vencimento")) or _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"
                     escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
-                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {desc}")
+                    linhas.append(f"    {escopo_icon} {data_str} • _{fmt(val)}_ {desc}")
                 linhas.append("")
 
         # Despesas
@@ -522,12 +522,7 @@ async def show_detail(callback: CallbackQuery):
                     escopo_icon = "🏠" if item.get("escopo") == "ambos" else "👤"
                     data_ref = _to_date(item.get("data_vencimento")) or _to_date(item.get("data_transacao")) or _get_ref_date(item)
                     data_str = data_ref.strftime("%d/%m") if data_ref else "-"
-                    parcela_str = ""
-                    if (item.get("tipo_pagamento") or "") == "parcelado":
-                        num = item.get("numero_parcela")
-                        tot = item.get("parcelas_total")
-                        parcela_str = f"({num}/{tot}) " if num and tot else ""
-                    linhas.append(f"  {escopo_icon} {data_str} • `{fmt(val)}` {parcela_str}{desc}")
+                    linhas.append(f"    {escopo_icon} {data_str} • _{fmt(val)}_ {desc}")
                 linhas.append("")
 
     texto_final = "\n".join(linhas)
@@ -565,7 +560,7 @@ async def show_pending(callback: CallbackQuery):
         msg = (
             f"⏳ *TRANSAÇÃO PREVISTA*\n\n"
             f"📂 {_escape_md(item.get('categoria_text', '-'))} › {_escape_md(item.get('subcategoria_text', '-'))}\n"
-            f"💰 `{fmt(float(item.get('valor') or 0))}`\n"
+            f"💰 _{fmt(float(item.get('valor') or 0))}_\n"
             f"🔖 Escopo: {_escape_md(item.get('escopo', '-'))}\n"
             f"📝 Descrição: {_escape_md(item.get('descricao') or '-')}\n"
             f"🗓️ Data de vencimento: {_escape_md(data_venc_texto)}\n"
@@ -638,7 +633,7 @@ async def handle_edit_value(message: Message, state: FSMContext):
     try:
         # Chamando a função do banco para atualizar o valor
         await database.update_transacao_valor(int(transacao_id), float(novo_valor))
-        await message.answer(f"✅ Valor atualizado para `{fmt(novo_valor)}`.", parse_mode="Markdown")
+        await message.answer(f"✅ Valor atualizado para _{fmt(novo_valor)}_.", parse_mode="Markdown")
     except Exception:
         logger.exception("Erro ao atualizar valor da transação")
         await message.answer("❌ Erro ao atualizar o valor. Tente novamente mais tarde.")
@@ -724,5 +719,5 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
                     num = item.get("numero_parcela")
                     tot = item.get("parcelas_total")
                     parcela_str = f"({num}/{tot}) " if num and tot else ""
-                output.append(f"          {escopo_icon} `{fmt(val)}` ► {parcela_str}{desc}")
+                output.append(f"          {escopo_icon} _{fmt(val)}_ ► {parcela_str}{desc}")
     return output

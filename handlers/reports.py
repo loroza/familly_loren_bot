@@ -22,7 +22,7 @@ MESES_PT = [
 
 
 def fmt(valor: float) -> str:
-    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"_{valor:,.2f}_".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _to_date(value):

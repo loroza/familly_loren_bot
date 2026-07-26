@@ -22,7 +22,7 @@ MESES_PT = [
 
 
 def fmt(valor: float) -> str:
-    return f"_{valor:,.2f}_".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def _to_date(value):
@@ -226,8 +226,8 @@ def build_monthly_report(data: dict, titulo_extra: str = "") -> str:
 
     # Saídas
     linhas.append("📉 *SAÍDAS*")
-    linhas.append(f"Total lançado: `{fmt(data['total_lancado'])}`")
-    linhas.append(f"Seu custo real: `{fmt(data['meu_custo_real'])}`")
+    linhas.append(f"Total lançado: _`{fmt(data['total_lancado'])}`_")
+    linhas.append(f"Seu custo real: _`{fmt(data['meu_custo_real'])}`_")
     linhas.append("")
 
     if data["grupos_pessoal"]:

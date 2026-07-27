@@ -187,6 +187,13 @@ async def get_pendentes_by_month(user_id: str, ano: int, mes: int):
     return [dict(r) for r in rows]
 
 
+async def get_transacao_by_id(transacao_id: int) -> dict | None:
+    """Retorna a transação como dict ou None se não existir."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("SELECT * FROM transacoes WHERE id = $1", transacao_id)
+    return dict(row) if row else None
+
+
 def _to_date(value) -> date | None:
     if value is None:
         return None

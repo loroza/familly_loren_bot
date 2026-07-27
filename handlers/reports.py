@@ -664,20 +664,54 @@ async def realizar_pagamento(callback: CallbackQuery):
 
             # notificar outros usuários autorizados (ex.: sua parceira)
             try:
+                trans = await database.get_transacao_by_id(transacao_id)
+                if trans:
+                    categoria = trans.get("categoria_text") or "-"
+                    subcat = trans.get("subcategoria_text") or "-"
+                    descricao_raw = trans.get("descricao") or "-"
+                    descricao = _escape_md(descricao_raw)
+                    raw_val = trans.get("valor_parcela") or trans.get("valor") or 0.0
+                    valor_total = float(raw_val)
+                    escopo = trans.get("escopo") or "-"
+                    forma = trans.get("forma_pagamento") or "-"
+                    tipo = trans.get("tipo_pagamento") or ""
+                    parcela_info = ""
+                    if tipo == "parcelado":
+                        num = trans.get("numero_parcela")
+                        tot = trans.get("parcelas_total")
+                        parcela_info = f" ({num}/{tot})" if num and tot else ""
+                    venc_dt = _to_date(trans.get("data_vencimento") or trans.get("vencimento") or trans.get("vencimento_parcela"))
+                    venc_str = venc_dt.strftime("%d/%m/%Y") if venc_dt else "-"
+
+                    if escopo == "ambos":
+                        parte = valor_total * 0.5
+                        valores_line = f"_{fmt(valor_total)}_ ({fmt(parte)} - 50%)"
+                    else:
+                        valores_line = f"_{fmt(valor_total)}_"
+
+                    notify_text = (
+                        "✅ Seu parceiro pagou a parte dele para essa transação.\n\n"
+                        f"📂 {_escape_md(categoria)} › {_escape_md(subcat)}\n"
+                        f"💰 {valores_line}\n"
+                        f"🔖 Escopo: {_escape_md(escopo)}\n"
+                        f"📝 Descrição: {descricao}{parcela_info}\n"
+                        f"🗓️ Data de vencimento: {_escape_md(venc_str)}\n"
+                        f"💳 Forma de pagamento: {_escape_md(forma)}\n"
+                        f"📦 Tipo de pagamento: {_escape_md(tipo)}\n"
+                    )
+                else:
+                    notify_text = f"ℹ️ Seu parceiro marcou a transação {transacao_id} como paga (detalhes não encontrados)."
+
                 others = await database.get_all_authorized_users()
-                # enviar para todos exceto o pagador
                 for uid in others:
                     if uid == payer_id:
                         continue
                     try:
-                        await callback.bot.send_message(
-                            int(uid),
-                            f"ℹ️ {callback.from_user.full_name} marcou a parte dele(a) como paga na transação `{transacao_id}`.\nAinda falta a sua parte. Por favor, confirme quando você pagar.",
-                        )
+                        await callback.bot.send_message(int(uid), notify_text, parse_mode="Markdown")
                     except Exception:
                         logger.exception("Não foi possível notificar o parceiro")
             except Exception:
-                logger.exception("Erro ao buscar usuários autorizados para notificação")
+                logger.exception("Erro ao buscar transação para notificação")
     except Exception:
         logger.exception("Erro ao realizar pagamento")
         await callback.message.answer("❌ Erro ao atualizar o pagamento. Tente novamente.")

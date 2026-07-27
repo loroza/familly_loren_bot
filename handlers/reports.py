@@ -553,14 +553,14 @@ async def show_pending(callback: CallbackQuery):
     # Mostrar pendentes; ordenar por data de vencimento/transação
     pendentes_sorted = sorted(pendentes, key=lambda r: _get_ref_date(r) or _to_date(r.get("data_vencimento")) or date(1970, 1, 1))
     for item in pendentes_sorted:
-        status_texto = "⏳ Previsto"
         data_venc = _get_ref_date(item) or _to_date(item.get("data_vencimento"))
         data_venc_texto = data_venc.strftime("%d/%m/%Y") if data_venc else "-"
+        valor_ambos = f" (_{fmt(float(item.get('valor') or 0)/2)}_) ► ***50%***" if item.get('escopo') == 'ambos' else ""
 
         msg = (
             f"⏳ *TRANSAÇÃO PREVISTA*\n\n"
             f"📂 {_escape_md(item.get('categoria_text', '-'))} › {_escape_md(item.get('subcategoria_text', '-'))}\n"
-            f"💰 _{fmt(float(item.get('valor') or 0))}_\n"
+            f"💰 _{fmt(float(item.get('valor') or 0))}_{valor_ambos}\n"
             f"🔖 Escopo: {_escape_md(item.get('escopo', '-'))}\n"
             f"📝 Descrição: {_escape_md(item.get('descricao') or '-')}\n"
             f"🗓️ Data de vencimento: {_escape_md(data_venc_texto)}\n"
@@ -685,7 +685,7 @@ async def realizar_pagamento(callback: CallbackQuery):
 
                     if escopo == "ambos":
                         parte = valor_total * 0.5
-                        valores_line = f"_{fmt(valor_total)}_ ({fmt(parte)} - 50%)"
+                        valores_line = f"_{fmt(valor_total)}_ (_{fmt(parte)}_ ► ***50%***)"
                     else:
                         valores_line = f"_{fmt(valor_total)}_"
 

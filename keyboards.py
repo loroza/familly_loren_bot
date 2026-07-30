@@ -220,6 +220,7 @@ def report_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="📅 Mensal")],
+            [KeyboardButton(text="📈 Tendência")],
             [KeyboardButton(text="⬅️ Voltar")]
         ],
         resize_keyboard=True,

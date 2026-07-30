@@ -3,7 +3,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.fsm.storage.memory import MemoryStorage
 from config import BOT_TOKEN
-from handlers import start, register_transaction, reports
+from handlers import start, register_transaction, reports, dashboard
 import database
 
 logging.basicConfig(level=logging.INFO)
@@ -15,7 +15,8 @@ async def main():
     dp.include_routers(
         start.router,
         register_transaction.router,
-        reports.router
+        reports.router,
+        dashboard.router
     )
 
     await database.init_db_pool()

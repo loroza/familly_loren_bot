@@ -173,8 +173,11 @@ async def get_pendentes_by_month(user_id: str, ano: int, mes: int):
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT * FROM transacoes
-            WHERE telegram_user_id = $1
-              AND status = 'previsto'
+            WHERE status = 'previsto'
+              AND (
+                  escopo = 'ambos'
+                  OR telegram_user_id = $1
+              )
               AND (
                   (data_vencimento IS NOT NULL AND EXTRACT(YEAR FROM data_vencimento) = $2 AND EXTRACT(MONTH FROM data_vencimento) = $3)
                   OR

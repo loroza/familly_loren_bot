@@ -653,16 +653,13 @@ async def realizar_pagamento(callback: CallbackQuery):
         res = await database.update_transacao_to_realizado(transacao_id, hoje, payer_id)
 
         if res.get("fully_paid"):
-            # comportamento atual quando o pagamento ficou 100% quitado
             try:
                 await callback.message.edit_text((callback.message.text or "") + "\n\n✅ Pagamento realizado com sucesso!")
             except Exception:
                 await callback.message.answer("✅ *Pagamento realizado com sucesso!*", parse_mode="Markdown")
         else:
-            # pagador confirmou apenas a sua parte — notificar o pagador e avisar o(s) parceiro(s)
             await callback.message.answer("✅ Sua parte foi marcada como paga. Aguardando confirmação da outra parte.", parse_mode="Markdown")
 
-            # notificar outros usuários autorizados (ex.: sua parceira)
             try:
                 trans = await database.get_transacao_by_id(transacao_id)
                 if trans:

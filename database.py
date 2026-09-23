@@ -326,3 +326,38 @@ async def update_transacao_valor(transacao_id: int, novo_valor: float) -> None:
         raise RuntimeError("pool não inicializado")
     async with pool.acquire() as conn:
         await conn.execute(query, novo_valor, transacao_id)
+
+async def criar_cartao(nome: str, limite: float, dia_fechamento: int, dia_vencimento: int):
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            """
+            INSERT INTO cartoes_credito (nome, limite, dia_fechamento, dia_vencimento)
+            VALUES ($1, $2, $3, $4)
+            RETURNING id, nome, limite, dia_fechamento, dia_vencimento
+            """,
+            nome, limite, dia_fechamento, dia_vencimento
+        )
+
+
+async def listar_cartoes_ativos():
+    async with pool.acquire() as conn:
+        return await conn.fetch(
+            """
+            SELECT id, nome, limite, dia_fechamento, dia_vencimento
+            FROM cartoes_credito
+            WHERE ativo = TRUE
+            ORDER BY nome
+            """
+        )
+
+
+async def buscar_cartao_por_id(cartao_id: int):
+    async with pool.acquire() as conn:
+        return await conn.fetchrow(
+            """
+            SELECT id, nome, limite, dia_fechamento, dia_vencimento
+            FROM cartoes_credito
+            WHERE id = $1
+            """,
+            cartao_id
+        )

@@ -24,11 +24,12 @@ class TransactionState(StatesGroup):
     waiting_for_scope = State()
     waiting_for_description = State()
     waiting_for_amount = State()
-    waiting_for_transaction_date = State()
-    waiting_for_due_date = State()
     waiting_for_payment_method = State()
     waiting_for_payment_type = State()
     waiting_for_installments = State()
+    waiting_for_credit_card = State()
+    waiting_for_transaction_date = State()
+    waiting_for_due_date = State()
     waiting_for_status = State()
 
 
@@ -93,6 +94,7 @@ async def save_transaction(message: Message, state: FSMContext):
         "banco": None,
         "status": status,
         "data_pagamento": data_pagamento,
+        "cartao_id": dados.get("cartao_id"),
     }
 
     try:
@@ -298,11 +300,50 @@ async def select_payment_method(message: Message, state: FSMContext):
         return
 
     await state.update_data(forma_pagamento=message.text)
+
+    if message.text == "💳 Cartão de Crédito":
+        cartoes = await database.listar_cartoes_ativos()
+
+        if not cartoes:
+            await state.update_data(cartao_id=None)
+            await state.set_state(TransactionState.waiting_for_payment_type)
+            await message.answer(
+                "Nenhum cartão cadastrado. Você pode cadastrar em 📲 Cadastro > 💳 Cartão de Crédito.\n\n"
+                "Tipo de pagamento:",
+                reply_markup=keyboards.payment_type_keyboard()
+            )
+            return
+
+        await state.set_state(TransactionState.waiting_for_credit_card)
+        await message.answer(
+            "Selecione o cartão utilizado:",
+            reply_markup=keyboards.select_cartao_keyboard(cartoes)
+        )
+        return
+
+    await state.update_data(cartao_id=None)
     await state.set_state(TransactionState.waiting_for_payment_type)
     await message.answer(
         "Tipo de pagamento:",
         reply_markup=keyboards.payment_type_keyboard()
     )
+
+@router.callback_query(StateFilter(TransactionState.waiting_for_credit_card), F.data.startswith("select_cartao:"))
+async def select_credit_card(callback: CallbackQuery, state: FSMContext):
+    cartao_id_raw = callback.data.split(":", 1)[1]
+
+    if cartao_id_raw == "outro":
+        await state.update_data(cartao_id=None)
+    else:
+        await state.update_data(cartao_id=int(cartao_id_raw))
+
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await state.set_state(TransactionState.waiting_for_payment_type)
+    await callback.message.answer(
+        "Tipo de pagamento:",
+        reply_markup=keyboards.payment_type_keyboard()
+    )
+    await callback.answer()
 
 
 @router.message(StateFilter(TransactionState.waiting_for_payment_type))

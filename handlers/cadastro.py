@@ -106,7 +106,7 @@ async def back_from_registration_menu(
     message: Message,
     state: FSMContext
 ):
-    await state.set_state(CadastroState.waiting_for_card_name)
+    await state.clear()
 
     await message.answer(
         "Menu principal:",
@@ -116,7 +116,7 @@ async def back_from_registration_menu(
 
 @router.message(
     StateFilter(CadastroState.viewing_card_menu),
-    F.text == "➕ Novo Cartão"
+    F.text == "⬅️ Voltar"
 )
 async def back_from_card_menu(
     message: Message,
@@ -131,12 +131,14 @@ async def back_from_card_menu(
     )
 
 
-@router.message(F.text == "➕ Novo Cartão")
+@router.message(
+    StateFilter(CadastroState.viewing_card_menu),
+    F.text == "➕ Novo Cartão"
+)
 async def start_new_card(
     message: Message,
     state: FSMContext
 ):
-    await state.clear()
     await state.set_state(CadastroState.waiting_for_card_name)
 
     await message.answer(

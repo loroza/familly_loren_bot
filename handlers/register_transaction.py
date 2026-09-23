@@ -240,11 +240,10 @@ async def enter_amount(message: Message, state: FSMContext):
             message.text.replace(",", ".").replace("R$", "").replace(" ", "").strip()
         )
         await state.update_data(valor=valor)
-        await state.set_state(TransactionState.waiting_for_transaction_date)
+        await state.set_state(TransactionState.waiting_for_payment_method)
         await message.answer(
-            "Digite a data da transação.\n"
-            "Formato: DD/MM/AAAA ou AAAA-MM-DD\n"
-            "Envie '.' para usar a data de hoje."
+            "Forma de pagamento:",
+            reply_markup=keyboards.payment_method_keyboard()
         )
     except ValueError:
         await message.answer("❌ Valor inválido. Digite apenas números. Ex: 150.50")
@@ -278,10 +277,10 @@ async def enter_due_date(message: Message, state: FSMContext):
         return
 
     await state.update_data(data_vencimento=data_vencimento)
-    await state.set_state(TransactionState.waiting_for_payment_method)
+    await state.set_state(TransactionState.waiting_for_status)
     await message.answer(
-        "Forma de pagamento:",
-        reply_markup=keyboards.payment_method_keyboard()
+        "Essa transação já foi realizada ou é prevista?",
+        reply_markup=keyboards.status_keyboard()
     )
 
 
@@ -322,10 +321,11 @@ async def select_payment_type(message: Message, state: FSMContext):
         return
 
     await state.update_data(parcelas_total=None)
-    await state.set_state(TransactionState.waiting_for_status)
+    await state.set_state(TransactionState.waiting_for_transaction_date)
     await message.answer(
-        "Essa transação já foi realizada ou é prevista?",
-        reply_markup=keyboards.status_keyboard()
+        "Digite a data da transação.\n"
+        "Formato: DD/MM/AAAA ou AAAA-MM-DD\n"
+        "Envie '.' para usar a data de hoje."
     )
 
 
@@ -338,10 +338,11 @@ async def enter_installments(message: Message, state: FSMContext):
             return
 
         await state.update_data(parcelas_total=parcelas)
-        await state.set_state(TransactionState.waiting_for_status)
+        await state.set_state(TransactionState.waiting_for_transaction_date)
         await message.answer(
-            "Essa transação já foi realizada ou é prevista?",
-            reply_markup=keyboards.status_keyboard()
+            "Digite a data da transação.\n"
+            "Formato: DD/MM/AAAA ou AAAA-MM-DD\n"
+            "Envie '.' para usar a data de hoje."
         )
 
     except ValueError:

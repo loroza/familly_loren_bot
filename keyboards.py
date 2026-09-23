@@ -64,7 +64,30 @@ def main_menu_keyboard():
                 KeyboardButton(text="➕ Nova Receita"),
                 KeyboardButton(text="➖ Nova Despesa")
             ],
-            [KeyboardButton(text="📊 Meu Relatório")]
+            [KeyboardButton(text="📊 Meu Relatório")],
+            [KeyboardButton(text="📲 Cadastro")]
+        ],
+        resize_keyboard=True
+    )
+
+# ─── Menu de Cadastro ───
+
+def cadastro_menu_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="💳 Cartão de Crédito")],
+            [KeyboardButton(text="⬅️ Voltar")]
+        ],
+        resize_keyboard=True
+    )
+
+
+def cartao_menu_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="➕ Novo Cartão")],
+            [KeyboardButton(text="📋 Ver Cartões")],
+            [KeyboardButton(text="⬅️ Voltar")]
         ],
         resize_keyboard=True
     )

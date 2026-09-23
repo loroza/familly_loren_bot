@@ -282,11 +282,16 @@ def report_month_keyboard():
 
 def select_cartao_keyboard(cartoes: list):
     buttons = [
-        [KeyboardButton(text=f"💳 {c['nome']}", callback_data=f"select_cartao:{c['id']}")]
+        [KeyboardButton(text=f"💳 {c['nome']}")]
         for c in cartoes
     ]
-    buttons.append([KeyboardButton(text="Outro / Não listado", callback_data="select_cartao:outro")])
-    return ReplyKeyboardMarkup(keyboard=buttons)
+    buttons.append([KeyboardButton(text="➕ Outro / Não listado")])
+    buttons.append([KeyboardButton(text="⬅️ Voltar")])
+    return ReplyKeyboardMarkup(
+        keyboard=buttons,
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
 
 # ─── Ver Lançamentos + Pendentes ───
 

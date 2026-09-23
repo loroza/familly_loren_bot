@@ -4,7 +4,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
@@ -328,22 +328,36 @@ async def select_payment_method(message: Message, state: FSMContext):
         reply_markup=keyboards.payment_type_keyboard()
     )
 
-@router.callback_query(StateFilter(TransactionState.waiting_for_credit_card), F.data.startswith("select_cartao:"))
-async def select_credit_card(callback: CallbackQuery, state: FSMContext):
-    cartao_id_raw = callback.data.split(":", 1)[1]
+@router.message(StateFilter(TransactionState.waiting_for_credit_card))
+async def select_credit_card(message: Message, state: FSMContext):
+    if message.text == "⬅️ Voltar":
+        await state.set_state(TransactionState.waiting_for_payment_method)
+        await message.answer(
+            "Forma de pagamento:",
+            reply_markup=keyboards.payment_method_keyboard()
+        )
+        return
 
-    if cartao_id_raw == "outro":
+    if message.text == "➕ Outro / Não listado":
         await state.update_data(cartao_id=None)
     else:
-        await state.update_data(cartao_id=int(cartao_id_raw))
+        cartoes = await database.listar_cartoes_ativos()
+        cartao_selecionado = next(
+            (c for c in cartoes if f"💳 {c['nome']}" == message.text),
+            None
+        )
 
-    await callback.message.edit_reply_markup(reply_markup=None)
+        if not cartao_selecionado:
+            await message.answer("❌ Selecione uma opção válida do teclado.")
+            return
+
+        await state.update_data(cartao_id=cartao_selecionado["id"])
+
     await state.set_state(TransactionState.waiting_for_payment_type)
-    await callback.message.answer(
+    await message.answer(
         "Tipo de pagamento:",
         reply_markup=keyboards.payment_type_keyboard()
     )
-    await callback.answer()
 
 
 @router.message(StateFilter(TransactionState.waiting_for_payment_type))

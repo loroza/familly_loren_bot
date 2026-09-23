@@ -280,6 +280,13 @@ def report_month_keyboard():
         one_time_keyboard=True
     )
 
+def select_cartao_keyboard(cartoes: list):
+    buttons = [
+        [KeyboardButton(text=f"💳 {c['nome']}", callback_data=f"select_cartao:{c['id']}")]
+        for c in cartoes
+    ]
+    buttons.append([KeyboardButton(text="Outro / Não listado", callback_data="select_cartao:outro")])
+    return ReplyKeyboardMarkup(keyboard=buttons)
 
 # ─── Ver Lançamentos + Pendentes ───
 
@@ -311,11 +318,3 @@ def realizar_pagamento_inline_keyboard(transacao_id: int):
             ]
         ]
     )
-
-def select_cartao_keyboard(cartoes: list):
-    buttons = [
-        [InlineKeyboardButton(text=f"💳 {c['nome']}", callback_data=f"select_cartao:{c['id']}")]
-        for c in cartoes
-    ]
-    buttons.append([InlineKeyboardButton(text="Outro / Não listado", callback_data="select_cartao:outro")])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)

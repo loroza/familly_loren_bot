@@ -91,7 +91,7 @@ async def insert_transacao(payload: dict):
                    escopo, descricao, valor, forma_pagamento, tipo_pagamento,
                    parcelas_total, data_transacao, data_vencimento, banco,
                    data_registro, criado_em, status, data_pagamento, cartao_id)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
             """,
                 str(payload.get("telegram_user_id")),
                 payload.get("tipo"),

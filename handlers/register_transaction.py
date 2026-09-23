@@ -12,6 +12,9 @@ from aiogram.filters import StateFilter
 import keyboards
 import database
 
+import calendar
+from dateutil.relativedelta import relativedelta
+
 logger = logging.getLogger(__name__)
 router = Router()
 
@@ -31,6 +34,24 @@ class TransactionState(StatesGroup):
     waiting_for_transaction_date = State()
     waiting_for_due_date = State()
     waiting_for_status = State()
+
+
+def calcular_vencimento_cartao(data_transacao, dia_fechamento: int, dia_vencimento: int):
+    def _safe_replace(d, day):
+        ultimo_dia = calendar.monthrange(d.year, d.month)[1]
+        return d.replace(day=min(day, ultimo_dia))
+
+    if data_transacao.day <= dia_fechamento:
+        mes_referencia = data_transacao
+    else:
+        mes_referencia = data_transacao + relativedelta(months=1)
+
+    if dia_vencimento <= dia_fechamento:
+        data_vencimento = _safe_replace(mes_referencia, dia_vencimento) + relativedelta(months=1)
+    else:
+        data_vencimento = _safe_replace(mes_referencia, dia_vencimento)
+
+    return data_vencimento
 
 
 def parse_date_to_iso(date_text: str, use_today_on_dot: bool = False):
@@ -261,6 +282,25 @@ async def enter_transaction_date(message: Message, state: FSMContext):
         return
 
     await state.update_data(data_transacao=data_transacao)
+
+    dados = await state.get_data()
+    dia_fechamento = dados.get("cartao_dia_fechamento")
+    dia_vencimento = dados.get("cartao_dia_vencimento")
+
+    if data_transacao and dia_fechamento and dia_vencimento:
+        data_vencimento_auto = calcular_vencimento_cartao(
+            data_transacao, dia_fechamento, dia_vencimento
+        )
+        await state.update_data(data_vencimento=data_vencimento_auto)
+        await state.set_state(TransactionState.waiting_for_status)
+        await message.answer(
+            f"🗓️ Vencimento calculado automaticamente pelo cartão: "
+            f"{data_vencimento_auto.strftime('%d/%m/%Y')}\n\n"
+            "Essa transação já foi realizada ou é prevista?",
+            reply_markup=keyboards.status_keyboard()
+        )
+        return
+
     await state.set_state(TransactionState.waiting_for_due_date)
     await message.answer(
         "Digite a data de vencimento.\n"
@@ -351,7 +391,11 @@ async def select_credit_card(message: Message, state: FSMContext):
             await message.answer("❌ Selecione uma opção válida do teclado.")
             return
 
-        await state.update_data(cartao_id=cartao_selecionado["id"])
+        await state.update_data(
+            cartao_id=cartao_selecionado["id"],
+            cartao_dia_fechamento=cartao_selecionado["dia_fechamento"],
+            cartao_dia_vencimento=cartao_selecionado["dia_vencimento"],
+        )
 
     await state.set_state(TransactionState.waiting_for_payment_type)
     await message.answer(

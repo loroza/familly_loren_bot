@@ -684,17 +684,17 @@ async def realizar_pagamento(callback: CallbackQuery):
                     tipo = trans.get("tipo_pagamento") or ""
                     parcela_info = ""
                     if tipo == "parcelado":
-                    num = trans.get("numero_parcela")
-                    tot = trans.get("parcelas_total")
-                    parcela_info = f" ({num}/{tot})" if num and tot else ""
-                    venc_dt = _to_date(trans.get("data_vencimento") or trans.get("vencimento") or trans.get("vencimento_parcela"))
-                    venc_str = venc_dt.strftime("%d/%m/%Y") if venc_dt else "-"
+                        num = trans.get("numero_parcela")
+                        tot = trans.get("parcelas_total")
+                        parcela_info = f" ({num}/{tot})" if num and tot else ""
+                        venc_dt = _to_date(trans.get("data_vencimento") or trans.get("vencimento") or trans.get("vencimento_parcela"))
+                        venc_str = venc_dt.strftime("%d/%m/%Y") if venc_dt else "-"
 
                     if escopo == "ambos":
-                    parte = valor_total * 0.5
-                    valores_line = f"_{fmt(valor_total)}_ (_{fmt(parte)}_ ► ***50%***)"
+                        parte = valor_total * 0.5
+                        valores_line = f"_{fmt(valor_total)}_ (_{fmt(parte)}_ ► ***50%***)"
                     else:
-                    valores_line = f"_{fmt(valor_total)}_"
+                        valores_line = f"_{fmt(valor_total)}_"
 
                     notify_text = (
                     "✅ Seu parceiro pagou a parte dele para essa transação.\n\n"
@@ -712,11 +712,11 @@ async def realizar_pagamento(callback: CallbackQuery):
                 others = await database.get_all_authorized_users()
                 for uid in others:
                     if uid == payer_id:
-                    continue
+                        continue
                     try:
-                    await callback.bot.send_message(int(uid), notify_text, parse_mode="Markdown")
+                        await callback.bot.send_message(int(uid), notify_text, parse_mode="Markdown")
                     except Exception:
-                    logger.exception("Não foi possível notificar o parceiro")
+                        logger.exception("Não foi possível notificar o parceiro")
             except Exception:
                 logger.exception("Erro ao buscar transação para notificação")
     except Exception:

@@ -9,6 +9,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 
+import io
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from aiogram.types import BufferedInputFile
+
 import database
 import keyboards
 
@@ -324,6 +330,9 @@ class ReportState(StatesGroup):
     waiting_for_month = State()
     waiting_for_year = State()
     editing_value = State()
+    waiting_for_fatura_card = State()
+    waiting_for_fatura_month = State()
+    waiting_for_fatura_year = State()
 
 
 # ─── Menu de Relatórios ───
@@ -752,3 +761,198 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
                     parcela_str = f"({num}/{tot}) " if num and tot else ""
                 output.append(f"          {escopo_icon} _{fmt(val)}_ ► {parcela_str}{desc}")
     return output
+
+def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
+    limite = info["limite"]
+    faturas = info["faturas"]
+    disponivel = info["limite_disponivel"]
+
+    fig, ax = plt.subplots(figsize=(8, 2.8))
+
+    cores_ciclo = ["#ff7f0e", "#ffbb33", "#2ca02c", "#1f77b4", "#9467bd"]
+    left = 0.0
+    handles, legend_labels = [], []
+
+    for idx, ((ano, mes), valor) in enumerate(faturas):
+        eh_atual = (ano, mes) == (ano_ref, mes_ref)
+        cor = "#d62728" if eh_atual else cores_ciclo[idx % len(cores_ciclo)]
+
+        ax.barh(0, valor, left=left, color=cor, height=0.6)
+
+        pct = (valor / limite * 100) if limite > 0 else 0
+        if pct >= 4:
+            ax.text(left + valor / 2, 0, f"{pct:.0f}%", ha="center", va="center",
+                     color="white", fontsize=9, fontweight="bold")
+
+        rotulo = f"{MESES_PT[mes][:3]}/{ano}" + (" (atual)" if eh_atual else "")
+        handles.append(plt.Rectangle((0, 0), 1, 1, color=cor))
+        legend_labels.append(f"{rotulo}: {fmt(valor)}")
+
+        left += valor
+
+    if disponivel > 0:
+        ax.barh(0, disponivel, left=left, color="#dcdcdc", height=0.6)
+        pct_disp = (disponivel / limite * 100) if limite > 0 else 0
+        if pct_disp >= 4:
+            ax.text(left + disponivel / 2, 0, f"{pct_disp:.0f}%", ha="center", va="center",
+                     color="#555", fontsize=9)
+        handles.append(plt.Rectangle((0, 0), 1, 1, color="#dcdcdc"))
+        legend_labels.append(f"Disponível: {fmt(disponivel)}")
+
+    ax.set_xlim(0, limite if limite > 0 else 1)
+    ax.set_ylim(-1, 1)
+    ax.axis("off")
+
+    ax.legend(handles, legend_labels, loc="upper center", bbox_to_anchor=(0.5, -0.12),
+               ncol=2, frameon=False, fontsize=8)
+
+    fig.suptitle(f"Limite total: R$ {limite:,.2f}", fontsize=12, fontweight="bold")
+    fig.tight_layout()
+
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+def build_fatura_lancamentos(lancamentos: list, cartao_nome: str, ano: int, mes: int) -> str:
+    mes_nome = MESES_PT[mes]
+    linhas = [f"🧾 *FATURA — {_escape_md(cartao_nome)}*", f"📅 {_escape_md(mes_nome.upper())}/{ano}", ""]
+
+    if not lancamentos:
+        linhas.append("_Nenhum lançamento nesta fatura._")
+        return "\n".join(linhas)
+
+    total = sum(float(l.get("valor") or 0) for l in lancamentos)
+    linhas.append(f"💰 Total da fatura: _{fmt(total)}_\n")
+    linhas.extend(_format_group_hierarchy(lancamentos))
+
+    return "\n".join(linhas)
+
+@router.message(F.text == "🧾 Faturas")
+async def start_fatura_report(message: Message, state: FSMContext):
+    await state.clear()
+    cartoes = await database.listar_cartoes_ativos()
+
+    if not cartoes:
+        await message.answer(
+            "Nenhum cartão de crédito cadastrado.\nCadastre em 📲 Cadastro > 💳 Cartão de Crédito.",
+            reply_markup=keyboards.report_menu_keyboard()
+        )
+        return
+
+    if len(cartoes) == 1:
+        await state.update_data(cartao_id=cartoes[0]["id"], cartao_nome=cartoes[0]["nome"], multi_cartao=False)
+        await state.set_state(ReportState.waiting_for_fatura_month)
+        await message.answer(
+            f"💳 Cartão: {cartoes[0]['nome']}\n\n📅 Selecione o mês da fatura:",
+            reply_markup=keyboards.report_month_keyboard()
+        )
+        return
+
+    await state.update_data(multi_cartao=True)
+    await state.set_state(ReportState.waiting_for_fatura_card)
+    await message.answer(
+        "Selecione o cartão:",
+        reply_markup=keyboards.select_cartao_fatura_keyboard(cartoes)
+    )
+
+
+@router.message(StateFilter(ReportState.waiting_for_fatura_card))
+async def select_fatura_card(message: Message, state: FSMContext):
+    if message.text == "⬅️ Voltar":
+        await state.clear()
+        await message.answer("Menu de relatórios:", reply_markup=keyboards.report_menu_keyboard())
+        return
+
+    cartoes = await database.listar_cartoes_ativos()
+    cartao = next((c for c in cartoes if f"💳 {c['nome']}" == message.text), None)
+
+    if not cartao:
+        await message.answer("❌ Selecione um cartão válido do teclado.")
+        return
+
+    await state.update_data(cartao_id=cartao["id"], cartao_nome=cartao["nome"])
+    await state.set_state(ReportState.waiting_for_fatura_month)
+    await message.answer(
+        f"💳 Cartão: {cartao['nome']}\n\n📅 Selecione o mês da fatura:",
+        reply_markup=keyboards.report_month_keyboard()
+    )
+
+
+@router.message(StateFilter(ReportState.waiting_for_fatura_month))
+async def select_fatura_month(message: Message, state: FSMContext):
+    texto = (message.text or "").strip()
+    dados = await state.get_data()
+
+    if texto == "⬅️ Voltar":
+        if dados.get("multi_cartao"):
+            cartoes = await database.listar_cartoes_ativos()
+            await state.set_state(ReportState.waiting_for_fatura_card)
+            await message.answer("Selecione o cartão:", reply_markup=keyboards.select_cartao_fatura_keyboard(cartoes))
+        else:
+            await state.clear()
+            await message.answer("Menu de relatórios:", reply_markup=keyboards.report_menu_keyboard())
+        return
+
+    meses_por_nome = {m: i for i, m in enumerate(MESES_PT) if m}
+    mes = meses_por_nome.get(texto)
+
+    if mes is None:
+        await message.answer("❌ Escolha um mês usando o teclado.", reply_markup=keyboards.report_month_keyboard())
+        return
+
+    await state.update_data(fatura_mes=mes)
+    await state.set_state(ReportState.waiting_for_fatura_year)
+    await message.answer(f"Você escolheu *{MESES_PT[mes]}*.\n\nAgora informe o ano (Ex: `2026`)", parse_mode="Markdown")
+
+
+@router.message(StateFilter(ReportState.waiting_for_fatura_year))
+async def select_fatura_year(message: Message, state: FSMContext):
+    texto = (message.text or "").strip()
+
+    if texto == "⬅️ Voltar":
+        await state.set_state(ReportState.waiting_for_fatura_month)
+        await message.answer("📅 Selecione o mês da fatura:", reply_markup=keyboards.report_month_keyboard())
+        return
+
+    try:
+        ano = int(texto)
+        if ano < 2000 or ano > 2100:
+            raise ValueError
+    except ValueError:
+        await message.answer("❌ Ano inválido. Exemplo: `2026`", parse_mode="Markdown")
+        return
+
+    dados = await state.get_data()
+    cartao_id = dados["cartao_id"]
+    cartao_nome = dados["cartao_nome"]
+    mes = dados["fatura_mes"]
+
+    await message.answer(f"⏳ Gerando fatura de *{MESES_PT[mes]} de {ano}* — {cartao_nome}...", parse_mode="Markdown")
+
+    info = await database.get_fatura_limite_info(cartao_id)
+
+    if not info:
+        await message.answer("❌ Cartão não encontrado.", reply_markup=keyboards.report_menu_keyboard())
+        await state.clear()
+        return
+
+    imagem = gerar_imagem_fatura(info, ano, mes)
+
+    await message.answer_photo(
+        BufferedInputFile(imagem, filename="fatura.png"),
+        caption=f"💳 *{_escape_md(cartao_nome)}* — Uso do limite",
+        parse_mode="Markdown"
+    )
+
+    lancamentos = await database.get_fatura_transacoes(cartao_id, ano, mes)
+    texto_fatura = build_fatura_lancamentos(lancamentos, cartao_nome, ano, mes)
+
+    await message.answer(
+        texto_fatura,
+        parse_mode="Markdown",
+        reply_markup=keyboards.report_menu_keyboard()
+    )
+
+    await state.clear()

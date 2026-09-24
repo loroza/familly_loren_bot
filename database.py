@@ -362,3 +362,57 @@ async def buscar_cartao_por_id(cartao_id: int):
             """,
             cartao_id
         )
+
+async def get_fatura_transacoes(cartao_id: int, ano: int, mes: int):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT * FROM transacoes
+            WHERE cartao_id = $1
+              AND data_vencimento IS NOT NULL
+              AND EXTRACT(YEAR FROM data_vencimento) = $2
+              AND EXTRACT(MONTH FROM data_vencimento) = $3
+            ORDER BY data_transacao
+        """, cartao_id, ano, mes)
+    return [dict(r) for r in rows]
+
+
+async def get_fatura_limite_info(cartao_id: int):
+    """
+    Retorna o limite total do cartão e o valor de cada fatura em aberto
+    (agrupado por mês/ano de vencimento), além do limite disponível.
+    """
+    async with pool.acquire() as conn:
+        cartao = await conn.fetchrow(
+            "SELECT id, nome, limite FROM cartoes_credito WHERE id = $1", cartao_id
+        )
+        if not cartao:
+            return None
+
+        rows = await conn.fetch("""
+            SELECT data_vencimento, valor
+            FROM transacoes
+            WHERE cartao_id = $1
+              AND status = 'previsto'
+              AND data_vencimento IS NOT NULL
+            ORDER BY data_vencimento
+        """, cartao_id)
+
+    faturas = {}
+    for r in rows:
+        dv = r["data_vencimento"]
+        chave = (dv.year, dv.month)
+        faturas[chave] = faturas.get(chave, 0.0) + float(r["valor"])
+
+    faturas_ordenadas = sorted(faturas.items())
+    limite = float(cartao["limite"])
+    limite_usado_total = sum(v for _, v in faturas_ordenadas)
+    limite_disponivel = max(limite - limite_usado_total, 0.0)
+
+    return {
+        "cartao_id": cartao["id"],
+        "cartao_nome": cartao["nome"],
+        "limite": limite,
+        "faturas": faturas_ordenadas,
+        "limite_usado_total": round(limite_usado_total, 2),
+        "limite_disponivel": round(limite_disponivel, 2),
+    }

@@ -244,12 +244,21 @@ def report_menu_keyboard():
         keyboard=[
             [KeyboardButton(text="📅 Mensal")],
             [KeyboardButton(text="📈 Tendência")],
+            [KeyboardButton(text="🧾 Faturas")],
             [KeyboardButton(text="⬅️ Voltar")]
         ],
         resize_keyboard=True,
         one_time_keyboard=True
     )
 
+def select_cartao_fatura_keyboard(cartoes: list):
+    buttons = [[KeyboardButton(text=f"💳 {c['nome']}")] for c in cartoes]
+    buttons.append([KeyboardButton(text="⬅️ Voltar")])
+    return ReplyKeyboardMarkup(
+        keyboard=buttons,
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )
 
 def report_month_keyboard():
     return ReplyKeyboardMarkup(

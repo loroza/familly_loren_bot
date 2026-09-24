@@ -762,7 +762,7 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
                     parcela_str = f"({num}/{tot}) " if num and tot else ""
 
                 # Data individual do item (usada apenas dentro da linha, não afeta o agrupamento)
-                d_item = _get_ref_date(item) or _to_date(item.get("data_transacao"))
+                d_item = _to_date(item.get("data_transacao"))
                 data_str = d_item.strftime("%d/%m") if d_item else "-"
 
                 output.append(f"          {escopo_icon} {data_str} • _{fmt(val)}_ ► {parcela_str}{desc}")

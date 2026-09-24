@@ -732,7 +732,6 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
     Retorna linhas formatadas agrupadas por data (data de referência) e categorias.
     Ordena por data de referência (data_pagamento > data_vencimento > data_transacao).
     """
-    # Ordena por data de referência
     sorted_items = sorted(items_list, key=lambda r: _get_ref_date(r) or date(1970, 1, 1))
     output = []
     grouped = {}
@@ -742,8 +741,10 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
         date_str = d.strftime("%d/%m/%Y") if d else "Sem Data"
         cat = (item.get("categoria_text") or "Outros").title()
 
-        if date_str not in grouped: grouped[date_str] = {}
-        if cat not in grouped[date_str]: grouped[date_str][cat] = []
+        if date_str not in grouped:
+            grouped[date_str] = {}
+        if cat not in grouped[date_str]:
+            grouped[date_str][cat] = []
         grouped[date_str][cat].append(item)
 
     for date_str, categories in grouped.items():
@@ -758,10 +759,13 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
                 if (item.get("tipo_pagamento") or "") == "parcelado":
                     num = item.get("numero_parcela")
                     tot = item.get("parcelas_total")
-                    data_ref = _to_date(item.get("data_transacao"))
-                    data_str = data_ref.strftime("%d/%m") if data_ref else "-"
                     parcela_str = f"({num}/{tot}) " if num and tot else ""
-                output.append(f"          {escopo_icon} {data_str} • _{fmt(val)}_ {parcela_str}{desc}")
+
+                # Data individual do item (usada apenas dentro da linha, não afeta o agrupamento)
+                d_item = _get_ref_date(item) or _to_date(item.get("data_transacao"))
+                data_str = d_item.strftime("%d/%m") if d_item else "-"
+
+                output.append(f"          {escopo_icon} {data_str} • _{fmt(val)}_ ► {parcela_str}{desc}")
     return output
 
 def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:

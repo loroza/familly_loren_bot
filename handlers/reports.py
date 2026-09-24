@@ -13,6 +13,7 @@ import io
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
 from aiogram.types import BufferedInputFile
 
 import database
@@ -683,27 +684,27 @@ async def realizar_pagamento(callback: CallbackQuery):
                     tipo = trans.get("tipo_pagamento") or ""
                     parcela_info = ""
                     if tipo == "parcelado":
-                        num = trans.get("numero_parcela")
-                        tot = trans.get("parcelas_total")
-                        parcela_info = f" ({num}/{tot})" if num and tot else ""
+                    num = trans.get("numero_parcela")
+                    tot = trans.get("parcelas_total")
+                    parcela_info = f" ({num}/{tot})" if num and tot else ""
                     venc_dt = _to_date(trans.get("data_vencimento") or trans.get("vencimento") or trans.get("vencimento_parcela"))
                     venc_str = venc_dt.strftime("%d/%m/%Y") if venc_dt else "-"
 
                     if escopo == "ambos":
-                        parte = valor_total * 0.5
-                        valores_line = f"_{fmt(valor_total)}_ (_{fmt(parte)}_ ► ***50%***)"
+                    parte = valor_total * 0.5
+                    valores_line = f"_{fmt(valor_total)}_ (_{fmt(parte)}_ ► ***50%***)"
                     else:
-                        valores_line = f"_{fmt(valor_total)}_"
+                    valores_line = f"_{fmt(valor_total)}_"
 
                     notify_text = (
-                        "✅ Seu parceiro pagou a parte dele para essa transação.\n\n"
-                        f"📂 {_escape_md(categoria)} › {_escape_md(subcat)}\n"
-                        f"💰 {valores_line}\n"
-                        f"🔖 Escopo: {_escape_md(escopo)}\n"
-                        f"📝 Descrição: {descricao}{parcela_info}\n"
-                        f"🗓️ Data de vencimento: {_escape_md(venc_str)}\n"
-                        f"💳 Forma de pagamento: {_escape_md(forma)}\n"
-                        f"📦 Tipo de pagamento: {_escape_md(tipo)}\n"
+                    "✅ Seu parceiro pagou a parte dele para essa transação.\n\n"
+                    f"📂 {_escape_md(categoria)} › {_escape_md(subcat)}\n"
+                    f"💰 {valores_line}\n"
+                    f"🔖 Escopo: {_escape_md(escopo)}\n"
+                    f"📝 Descrição: {descricao}{parcela_info}\n"
+                    f"🗓️ Data de vencimento: {_escape_md(venc_str)}\n"
+                    f"💳 Forma de pagamento: {_escape_md(forma)}\n"
+                    f"📦 Tipo de pagamento: {_escape_md(tipo)}\n"
                     )
                 else:
                     notify_text = f"ℹ️ Seu parceiro marcou a transação {transacao_id} como paga (detalhes não encontrados)."
@@ -711,11 +712,11 @@ async def realizar_pagamento(callback: CallbackQuery):
                 others = await database.get_all_authorized_users()
                 for uid in others:
                     if uid == payer_id:
-                        continue
+                    continue
                     try:
-                        await callback.bot.send_message(int(uid), notify_text, parse_mode="Markdown")
+                    await callback.bot.send_message(int(uid), notify_text, parse_mode="Markdown")
                     except Exception:
-                        logger.exception("Não foi possível notificar o parceiro")
+                    logger.exception("Não foi possível notificar o parceiro")
             except Exception:
                 logger.exception("Erro ao buscar transação para notificação")
     except Exception:
@@ -786,8 +787,8 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
 
         pct = (valor / limite * 100) if limite > 0 else 0
         if pct >= 4:
-            ax.text(left + valor / 2, 0, f"{pct:.0f}%", ha="center", va="center",
-                     color="white", fontsize=9, fontweight="bold")
+            ax.text(left + valor / 2, 0, f"{pct:.1f}%", ha="center", va="center",
+                    color="white", fontsize=9, fontweight="bold")
 
         rotulo = f"{MESES_PT[mes][:3]}/{ano}" + (" (atual)" if eh_atual else "")
         handles.append(plt.Rectangle((0, 0), 1, 1, color=cor))
@@ -800,7 +801,7 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
         pct_disp = (disponivel / limite * 100) if limite > 0 else 0
         if pct_disp >= 4:
             ax.text(left + disponivel / 2, 0, f"{pct_disp:.0f}%", ha="center", va="center",
-                     color="#555", fontsize=9)
+                    color="#555", fontsize=9)
         handles.append(plt.Rectangle((0, 0), 1, 1, color="#dcdcdc"))
         legend_labels.append(f"Disponível: {fmt(disponivel)}")
 

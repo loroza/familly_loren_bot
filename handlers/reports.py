@@ -812,7 +812,7 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
     bar_x1 = pad_x + bar_w
 
     swatch_size = int(height * 0.09)
-    gap_bar_legend = int(height * 0.09)
+    gap_bar_legend = int(height * 0.29)
 
     conteudo_h = bar_h + gap_bar_legend + swatch_size
     margem_v = max((height - conteudo_h) // 2, 0)

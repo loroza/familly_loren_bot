@@ -797,7 +797,7 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
         total = limite
 
     # --- Proporção baseada no exemplo criado no PowerPoint (10,27 cm x 1,92 cm) ---
-    target_ratio = 3.5 / 1  # ≈ 5,349
+    target_ratio = 3 / 1  # ≈ 5,349
     target_width = 1200
     target_height = round(target_width / target_ratio)
 
@@ -805,8 +805,8 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
     scale = 3
     width, height = target_width * scale, target_height * scale
 
-    pad_x = int(width * 0.033)
-    bar_h = int(height * 0.295)
+    pad_x = int(width * 0.013)
+    bar_h = int(height * 0.195)
     bar_w = width - 2 * pad_x
     bar_x0 = pad_x
     bar_x1 = pad_x + bar_w

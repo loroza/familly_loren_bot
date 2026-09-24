@@ -785,28 +785,42 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
         else:
             valor_proximas += valor
 
+    # Sempre exibimos os 3 segmentos na legenda, mesmo com valor 0.
     segmentos = [
         (valor_atual, cor_atual, "Fatura atual"),
         (valor_proximas, cor_proximas, "Próximas faturas"),
         (disponivel, cor_disponivel, "Limite liberado"),
     ]
-    segmentos = [s for s in segmentos if s[0] > 0]
-    if not segmentos:
-        segmentos = [(limite, cor_disponivel, "Limite liberado")]
 
-    total = sum(s[0] for s in segmentos) or 1.0
+    total = sum(s[0] for s in segmentos)
+    if total <= 0:
+        total = limite
 
-    # --- renderiza em resolução 2x para anti-aliasing suave e reduz no final ---
-    scale = 2
-    width, height = 1200 * scale, 460 * scale
-    pad_x = 60 * scale
-    bar_y0 = 110 * scale
-    bar_h = 130 * scale
-    bar_y1 = bar_y0 + bar_h
+    # --- Proporção baseada no exemplo criado no PowerPoint (10,27 cm x 1,92 cm) ---
+    target_ratio = 10.27 / 1.92  # ≈ 5,349
+    target_width = 1200
+    target_height = round(target_width / target_ratio)
+
+    # renderiza em resolução ampliada para anti-aliasing suave e reduz no final
+    scale = 3
+    width, height = target_width * scale, target_height * scale
+
+    pad_x = int(width * 0.033)
+    bar_h = int(height * 0.295)
+    bar_w = width - 2 * pad_x
     bar_x0 = pad_x
-    bar_x1 = width - pad_x
-    bar_w = bar_x1 - bar_x0
+    bar_x1 = pad_x + bar_w
+
+    swatch_size = int(height * 0.09)
+    gap_bar_legend = int(height * 0.16)
+
+    conteudo_h = bar_h + gap_bar_legend + swatch_size
+    margem_v = max((height - conteudo_h) // 2, 0)
+    bar_y0 = margem_v
+    bar_y1 = bar_y0 + bar_h
     radius = bar_h // 2
+
+    legend_y = bar_y1 + gap_bar_legend
 
     img = Image.new("RGB", (width, height), bg_color)
     draw = ImageDraw.Draw(img)
@@ -817,7 +831,8 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
     left = bar_x0
     for valor, cor, _ in segmentos:
         seg_w = bar_w * (valor / total)
-        odraw.rectangle([left, bar_y0, left + seg_w, bar_y1], fill=cor)
+        if seg_w > 0:
+            odraw.rectangle([left, bar_y0, left + seg_w, bar_y1], fill=cor)
         left += seg_w
 
     # máscara em formato de pílula (cápsula) para recortar o overlay
@@ -834,14 +849,13 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
     except Exception:
         reg_path = it_path = None
 
-    font_label = ImageFont.truetype(reg_path, 30 * scale) if reg_path else ImageFont.load_default()
-    font_value = ImageFont.truetype(it_path, 30 * scale) if it_path else ImageFont.load_default()
+    font_size = int(swatch_size * 0.78)
+    font_label = ImageFont.truetype(reg_path, font_size) if reg_path else ImageFont.load_default()
+    font_value = ImageFont.truetype(it_path, font_size) if it_path else ImageFont.load_default()
 
-    # --- legenda: swatch colorido + "Label: valor" ---
-    legend_y = bar_y1 + 55 * scale
-    swatch_size = 26 * scale
-    gap_swatch_text = 18 * scale
-    gap_between = 70 * scale
+    # --- legenda: swatch colorido + "Label: valor" (sempre exibida, mesmo com valor 0) ---
+    gap_swatch_text = int(swatch_size * 0.45)
+    gap_between = int(swatch_size * 1.8)
 
     itens = []
     for valor, cor, label in segmentos:
@@ -858,7 +872,7 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
     for cor, texto_label, texto_valor, item_w in itens:
         sw_y0 = legend_y
         sw_y1 = legend_y + swatch_size
-        draw.rounded_rectangle([x, sw_y0, x + swatch_size, sw_y1], radius=swatch_size // 3, fill=cor)
+        draw.rounded_rectangle([x, sw_y0, x + swatch_size, sw_y1], radius=max(swatch_size // 3, 1), fill=cor)
         tx = x + swatch_size + gap_swatch_text
         ty = legend_y + swatch_size / 2
         draw.text((tx, ty), texto_label, font=font_label, fill=cor_texto, anchor="lm")
@@ -866,7 +880,7 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
         draw.text((tx2, ty), texto_valor, font=font_value, fill=cor_texto, anchor="lm")
         x += item_w + gap_between
 
-    img = img.resize((width // scale, height // scale), Image.LANCZOS)
+    img = img.resize((target_width, target_height), Image.LANCZOS)
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")

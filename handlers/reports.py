@@ -849,7 +849,7 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
     except Exception:
         reg_path = it_path = None
 
-    font_size = int(swatch_size * 0.78)
+    font_size = int(swatch_size * 0.68)
     font_label = ImageFont.truetype(reg_path, font_size) if reg_path else ImageFont.load_default()
     font_value = ImageFont.truetype(it_path, font_size) if it_path else ImageFont.load_default()
 

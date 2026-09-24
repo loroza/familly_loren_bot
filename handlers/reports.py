@@ -10,10 +10,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
 
 import io
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+from PIL import Image, ImageDraw, ImageFont
+import matplotlib.font_manager as fm
 from aiogram.types import BufferedInputFile
 
 import database
@@ -771,12 +769,13 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
 def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
     limite = info["limite"] if info["limite"] > 0 else 1.0
     faturas = info["faturas"]
-    disponivel = info["limite_disponivel"]
+    disponivel = max(info["limite_disponivel"], 0.0)
 
-    bg_color = "#1c2733"
-    cor_atual = "#ffc107"
-    cor_proximas = "#5c7a99"
-    cor_disponivel = "#2f3e50"
+    bg_color = (28, 39, 51)        # #1c2733
+    cor_atual = (255, 193, 7)      # #ffc107
+    cor_proximas = (92, 122, 153)  # #5c7a99
+    cor_disponivel = (47, 62, 80)  # #2f3e50
+    cor_texto = (255, 255, 255)
 
     valor_atual = 0.0
     valor_proximas = 0.0
@@ -797,58 +796,80 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
 
     total = sum(s[0] for s in segmentos) or 1.0
 
-    fig, ax = plt.subplots(figsize=(9, 3.6))
-    fig.patch.set_facecolor(bg_color)
-    ax.set_facecolor(bg_color)
+    # --- renderiza em resolução 2x para anti-aliasing suave e reduz no final ---
+    scale = 2
+    width, height = 1200 * scale, 460 * scale
+    pad_x = 60 * scale
+    bar_y0 = 110 * scale
+    bar_h = 130 * scale
+    bar_y1 = bar_y0 + bar_h
+    bar_x0 = pad_x
+    bar_x1 = width - pad_x
+    bar_w = bar_x1 - bar_x0
+    radius = bar_h // 2
 
-    bar_h = 0.55
-    bar_y = 0.55
+    img = Image.new("RGB", (width, height), bg_color)
+    draw = ImageDraw.Draw(img)
 
-    bar_mask = mpatches.FancyBboxPatch(
-        (0, bar_y), total, bar_h,
-        boxstyle=f"round,pad=0,rounding_size={bar_h/2}",
-        linewidth=0, facecolor="none"
-    )
-    ax.add_patch(bar_mask)
-
-    left = 0.0
+    # camada com os segmentos coloridos "crus" (retângulos retos)
+    overlay = Image.new("RGB", (width, height), bg_color)
+    odraw = ImageDraw.Draw(overlay)
+    left = bar_x0
     for valor, cor, _ in segmentos:
-        rect = mpatches.Rectangle((left, bar_y), valor, bar_h, facecolor=cor, linewidth=0)
-        rect.set_clip_path(bar_mask)
-        ax.add_patch(rect)
-        left += valor
+        seg_w = bar_w * (valor / total)
+        odraw.rectangle([left, bar_y0, left + seg_w, bar_y1], fill=cor)
+        left += seg_w
 
-    n = len(segmentos)
-    margem = total * 0.03
-    largura_util = total - 2 * margem
-    xs = [margem + i * (largura_util / n) for i in range(n)]
+    # máscara em formato de pílula (cápsula) para recortar o overlay
+    mask = Image.new("L", (width, height), 0)
+    mdraw = ImageDraw.Draw(mask)
+    mdraw.rounded_rectangle([bar_x0, bar_y0, bar_x1, bar_y1], radius=radius, fill=255)
 
-    swatch_w = total * 0.012
-    swatch_h = 0.42
-    swatch_y = -0.05
+    img.paste(overlay, (0, 0), mask)
 
-    for x, (valor, cor, label) in zip(xs, segmentos):
-        swatch = mpatches.FancyBboxPatch(
-            (x, swatch_y), swatch_w, swatch_h,
-            boxstyle=f"round,pad=0,rounding_size={swatch_w/2}",
-            facecolor=cor, linewidth=0
-        )
-        ax.add_patch(swatch)
-        ax.text(
-            x + swatch_w * 2.2, swatch_y + swatch_h / 2,
-            f"{label}: $\\mathit{{{fmt(valor)}}}$",
-            color="white", fontsize=12, va="center", ha="left"
-        )
+    # --- fontes (usa as fontes já embutidas no matplotlib) ---
+    try:
+        reg_path = fm.findfont(fm.FontProperties(family="DejaVu Sans"))
+        it_path = fm.findfont(fm.FontProperties(family="DejaVu Sans", style="italic"))
+    except Exception:
+        reg_path = it_path = None
 
-    ax.set_xlim(0, total)
-    ax.set_ylim(-0.2, bar_y + bar_h + 0.1)
-    ax.axis("off")
+    font_label = ImageFont.truetype(reg_path, 30 * scale) if reg_path else ImageFont.load_default()
+    font_value = ImageFont.truetype(it_path, 30 * scale) if it_path else ImageFont.load_default()
 
-    fig.tight_layout(pad=0.6)
+    # --- legenda: swatch colorido + "Label: valor" ---
+    legend_y = bar_y1 + 55 * scale
+    swatch_size = 26 * scale
+    gap_swatch_text = 18 * scale
+    gap_between = 70 * scale
+
+    itens = []
+    for valor, cor, label in segmentos:
+        texto_label = f"{label}: "
+        texto_valor = fmt(valor)
+        w_label = draw.textlength(texto_label, font=font_label)
+        w_valor = draw.textlength(texto_valor, font=font_value)
+        item_w = swatch_size + gap_swatch_text + w_label + w_valor
+        itens.append((cor, texto_label, texto_valor, item_w))
+
+    total_itens_w = sum(i[3] for i in itens) + gap_between * max(len(itens) - 1, 0)
+    x = bar_x0 + max((bar_w - total_itens_w) / 2, 0)
+
+    for cor, texto_label, texto_valor, item_w in itens:
+        sw_y0 = legend_y
+        sw_y1 = legend_y + swatch_size
+        draw.rounded_rectangle([x, sw_y0, x + swatch_size, sw_y1], radius=swatch_size // 3, fill=cor)
+        tx = x + swatch_size + gap_swatch_text
+        ty = legend_y + swatch_size / 2
+        draw.text((tx, ty), texto_label, font=font_label, fill=cor_texto, anchor="lm")
+        tx2 = tx + draw.textlength(texto_label, font=font_label)
+        draw.text((tx2, ty), texto_valor, font=font_value, fill=cor_texto, anchor="lm")
+        x += item_w + gap_between
+
+    img = img.resize((width // scale, height // scale), Image.LANCZOS)
 
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor())
-    plt.close(fig)
+    img.save(buf, format="PNG")
     buf.seek(0)
     return buf.read()
 

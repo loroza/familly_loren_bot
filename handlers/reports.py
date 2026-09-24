@@ -687,8 +687,8 @@ async def realizar_pagamento(callback: CallbackQuery):
                         num = trans.get("numero_parcela")
                         tot = trans.get("parcelas_total")
                         parcela_info = f" ({num}/{tot})" if num and tot else ""
-                        venc_dt = _to_date(trans.get("data_vencimento") or trans.get("vencimento") or trans.get("vencimento_parcela"))
-                        venc_str = venc_dt.strftime("%d/%m/%Y") if venc_dt else "-"
+                    venc_dt = _to_date(trans.get("data_vencimento") or trans.get("vencimento") or trans.get("vencimento_parcela"))
+                    venc_str = venc_dt.strftime("%d/%m/%Y") if venc_dt else "-"
 
                     if escopo == "ambos":
                         parte = valor_total * 0.5
@@ -697,14 +697,14 @@ async def realizar_pagamento(callback: CallbackQuery):
                         valores_line = f"_{fmt(valor_total)}_"
 
                     notify_text = (
-                    "✅ Seu parceiro pagou a parte dele para essa transação.\n\n"
-                    f"📂 {_escape_md(categoria)} › {_escape_md(subcat)}\n"
-                    f"💰 {valores_line}\n"
-                    f"🔖 Escopo: {_escape_md(escopo)}\n"
-                    f"📝 Descrição: {descricao}{parcela_info}\n"
-                    f"🗓️ Data de vencimento: {_escape_md(venc_str)}\n"
-                    f"💳 Forma de pagamento: {_escape_md(forma)}\n"
-                    f"📦 Tipo de pagamento: {_escape_md(tipo)}\n"
+                        "✅ Seu parceiro pagou a parte dele para essa transação.\n\n"
+                        f"📂 {_escape_md(categoria)} › {_escape_md(subcat)}\n"
+                        f"💰 {valores_line}\n"
+                        f"🔖 Escopo: {_escape_md(escopo)}\n"
+                        f"📝 Descrição: {descricao}{parcela_info}\n"
+                        f"🗓️ Data de vencimento: {_escape_md(venc_str)}\n"
+                        f"💳 Forma de pagamento: {_escape_md(forma)}\n"
+                        f"📦 Tipo de pagamento: {_escape_md(tipo)}\n"
                     )
                 else:
                     notify_text = f"ℹ️ Seu parceiro marcou a transação {transacao_id} como paga (detalhes não encontrados)."
@@ -769,54 +769,85 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
     return output
 
 def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
-    limite = info["limite"]
+    limite = info["limite"] if info["limite"] > 0 else 1.0
     faturas = info["faturas"]
     disponivel = info["limite_disponivel"]
 
-    fig, ax = plt.subplots(figsize=(8, 2.8))
+    bg_color = "#1c2733"
+    cor_atual = "#ffc107"
+    cor_proximas = "#5c7a99"
+    cor_disponivel = "#2f3e50"
 
-    cores_ciclo = ["#ff7f0e", "#ffbb33", "#2ca02c", "#1f77b4", "#9467bd"]
+    valor_atual = 0.0
+    valor_proximas = 0.0
+    for (ano, mes), valor in faturas:
+        if (ano, mes) == (ano_ref, mes_ref):
+            valor_atual += valor
+        else:
+            valor_proximas += valor
+
+    segmentos = [
+        (valor_atual, cor_atual, "Fatura atual"),
+        (valor_proximas, cor_proximas, "Próximas faturas"),
+        (disponivel, cor_disponivel, "Limite liberado"),
+    ]
+    segmentos = [s for s in segmentos if s[0] > 0]
+    if not segmentos:
+        segmentos = [(limite, cor_disponivel, "Limite liberado")]
+
+    total = sum(s[0] for s in segmentos) or 1.0
+
+    fig, ax = plt.subplots(figsize=(9, 3.6))
+    fig.patch.set_facecolor(bg_color)
+    ax.set_facecolor(bg_color)
+
+    bar_h = 0.55
+    bar_y = 0.55
+
+    bar_mask = mpatches.FancyBboxPatch(
+        (0, bar_y), total, bar_h,
+        boxstyle=f"round,pad=0,rounding_size={bar_h/2}",
+        linewidth=0, facecolor="none"
+    )
+    ax.add_patch(bar_mask)
+
     left = 0.0
-    handles, legend_labels = [], []
-
-    for idx, ((ano, mes), valor) in enumerate(faturas):
-        eh_atual = (ano, mes) == (ano_ref, mes_ref)
-        cor = "#d62728" if eh_atual else cores_ciclo[idx % len(cores_ciclo)]
-
-        ax.barh(0, valor, left=left, color=cor, height=0.6)
-
-        pct = (valor / limite * 100) if limite > 0 else 0
-        if pct >= 4:
-            ax.text(left + valor / 2, 0, f"{pct:.1f}%", ha="center", va="center",
-                    color="white", fontsize=9, fontweight="bold")
-
-        rotulo = f"{MESES_PT[mes][:3]}/{ano}" + (" (atual)" if eh_atual else "")
-        handles.append(plt.Rectangle((0, 0), 1, 1, color=cor))
-        legend_labels.append(f"{rotulo}: {fmt(valor)}")
-
+    for valor, cor, _ in segmentos:
+        rect = mpatches.Rectangle((left, bar_y), valor, bar_h, facecolor=cor, linewidth=0)
+        rect.set_clip_path(bar_mask)
+        ax.add_patch(rect)
         left += valor
 
-    if disponivel > 0:
-        ax.barh(0, disponivel, left=left, color="#dcdcdc", height=0.6)
-        pct_disp = (disponivel / limite * 100) if limite > 0 else 0
-        if pct_disp >= 4:
-            ax.text(left + disponivel / 2, 0, f"{pct_disp:.0f}%", ha="center", va="center",
-                    color="#555", fontsize=9)
-        handles.append(plt.Rectangle((0, 0), 1, 1, color="#dcdcdc"))
-        legend_labels.append(f"Disponível: {fmt(disponivel)}")
+    n = len(segmentos)
+    margem = total * 0.03
+    largura_util = total - 2 * margem
+    xs = [margem + i * (largura_util / n) for i in range(n)]
 
-    ax.set_xlim(0, limite if limite > 0 else 1)
-    ax.set_ylim(-1, 1)
+    swatch_w = total * 0.012
+    swatch_h = 0.42
+    swatch_y = -0.05
+
+    for x, (valor, cor, label) in zip(xs, segmentos):
+        swatch = mpatches.FancyBboxPatch(
+            (x, swatch_y), swatch_w, swatch_h,
+            boxstyle=f"round,pad=0,rounding_size={swatch_w/2}",
+            facecolor=cor, linewidth=0
+        )
+        ax.add_patch(swatch)
+        ax.text(
+            x + swatch_w * 2.2, swatch_y + swatch_h / 2,
+            f"{label}: $\\mathit{{{fmt(valor)}}}$",
+            color="white", fontsize=12, va="center", ha="left"
+        )
+
+    ax.set_xlim(0, total)
+    ax.set_ylim(-0.2, bar_y + bar_h + 0.1)
     ax.axis("off")
 
-    ax.legend(handles, legend_labels, loc="upper center", bbox_to_anchor=(0.5, -0.12),
-               ncol=2, frameon=False, fontsize=8)
-
-    fig.suptitle(f"Limite total: R$ {limite:,.2f}", fontsize=12, fontweight="bold")
-    fig.tight_layout()
+    fig.tight_layout(pad=0.6)
 
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=150, bbox_inches="tight")
+    fig.savefig(buf, format="png", dpi=150, facecolor=fig.get_facecolor())
     plt.close(fig)
     buf.seek(0)
     return buf.read()

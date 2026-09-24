@@ -758,8 +758,10 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
                 if (item.get("tipo_pagamento") or "") == "parcelado":
                     num = item.get("numero_parcela")
                     tot = item.get("parcelas_total")
+                    data_ref = _to_date(item.get("data_transacao"))
+                    data_str = data_ref.strftime("%d/%m") if data_ref else "-"
                     parcela_str = f"({num}/{tot}) " if num and tot else ""
-                output.append(f"          {escopo_icon} _{fmt(val)}_ ► {parcela_str}{desc}")
+                output.append(f"          {escopo_icon} {data_str} • _{fmt(val)}_ {parcela_str}{desc}")
     return output
 
 def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:

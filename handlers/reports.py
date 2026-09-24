@@ -748,7 +748,6 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
         grouped[date_str][cat].append(item)
 
     for date_str, categories in grouped.items():
-        output.append(f"\n📅 *{_escape_md(date_str)}*")
         for cat, items in categories.items():
             output.append(f"\n  📂 *{_escape_md(cat)}*")
             for item in items:
@@ -765,7 +764,7 @@ def _format_group_hierarchy(items_list: list) -> list[str]:
                 d_item = _to_date(item.get("data_transacao"))
                 data_str = d_item.strftime("%d/%m") if d_item else "-"
 
-                output.append(f"          {escopo_icon} {data_str} • _{fmt(val)}_ ► {parcela_str}{desc}")
+                output.append(f"          {escopo_icon} {data_str} • _{fmt(val)}_ {parcela_str}{desc}")
     return output
 
 def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:

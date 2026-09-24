@@ -806,13 +806,13 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
     width, height = target_width * scale, target_height * scale
 
     pad_x = int(width * 0.013)
-    bar_h = int(height * 0.195)
+    bar_h = int(height * 0.165)
     bar_w = width - 2 * pad_x
     bar_x0 = pad_x
     bar_x1 = pad_x + bar_w
 
     swatch_size = int(height * 0.09)
-    gap_bar_legend = int(height * 0.29)
+    gap_bar_legend = int(height * 0.09)
 
     conteudo_h = bar_h + gap_bar_legend + swatch_size
     margem_v = max((height - conteudo_h) // 2, 0)
@@ -855,7 +855,7 @@ def gerar_imagem_fatura(info: dict, ano_ref: int, mes_ref: int) -> bytes:
 
     # --- legenda: swatch colorido + "Label: valor" (sempre exibida, mesmo com valor 0) ---
     gap_swatch_text = int(swatch_size * 0.45)
-    gap_between = int(swatch_size * 1.8)
+    gap_between = int(swatch_size * 1.6)
 
     itens = []
     for valor, cor, label in segmentos:

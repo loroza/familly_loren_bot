@@ -97,6 +97,8 @@ async def save_transaction(message: Message, state: FSMContext):
     if status == "realizado":
         data_pagamento = dados.get("data_transacao") or agora_br.date()
 
+    codigo_casa = await database.get_user_casa(str(message.from_user.id))
+
     payload = {
         "telegram_user_id": str(message.from_user.id),
         "tipo": "receita" if dados["tipo"] == "receitas" else "despesa",
@@ -116,6 +118,7 @@ async def save_transaction(message: Message, state: FSMContext):
         "status": status,
         "data_pagamento": data_pagamento,
         "cartao_id": dados.get("cartao_id"),
+        "codigo_casa": codigo_casa,
     }
 
     try:
@@ -128,7 +131,7 @@ async def save_transaction(message: Message, state: FSMContext):
         data_pagamento_texto = str(payload["data_pagamento"]) if payload["data_pagamento"] else "-"
 
         if payload["escopo"] == "ambos":
-            authorized_ids = await database.get_all_authorized_users()
+            authorized_ids = await database.get_authorized_users_by_casa(codigo_casa)
             dt_str = payload['data_transacao'].strftime('%d/%m/%Y') if payload['data_transacao'] else "-"
 
             msg_familia = (
@@ -342,7 +345,8 @@ async def select_payment_method(message: Message, state: FSMContext):
     await state.update_data(forma_pagamento=message.text)
 
     if message.text == "💳 Cartão de Crédito":
-        cartoes = await database.listar_cartoes_ativos()
+        codigo_casa = await database.get_user_casa(str(message.from_user.id))
+        cartoes = await database.listar_cartoes_ativos(codigo_casa)
 
         if not cartoes:
             await state.update_data(cartao_id=None)
@@ -381,7 +385,8 @@ async def select_credit_card(message: Message, state: FSMContext):
     if message.text == "➕ Outro / Não listado":
         await state.update_data(cartao_id=None)
     else:
-        cartoes = await database.listar_cartoes_ativos()
+        codigo_casa = await database.get_user_casa(str(message.from_user.id))
+        cartoes = await database.listar_cartoes_ativos(codigo_casa)
         cartao_selecionado = next(
             (c for c in cartoes if f"💳 {c['nome']}" == message.text),
             None

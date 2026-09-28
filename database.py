@@ -34,16 +34,17 @@ async def is_user_authorized(telegram_id: str) -> bool:
         return bool(row and row.get("authorized"))
 
 
-async def authorize_user(telegram_id: str, nome: str | None = None, username: str | None = None):
+async def authorize_user(telegram_id: str, nome: str | None = None, username: str | None = None, codigo_casa: str = "CASA_1"):
     async with pool.acquire() as conn:
         await conn.execute("""
-            INSERT INTO usuarios (telegram_id, nome, username, authorized)
-            VALUES ($1, $2, $3, TRUE)
+            INSERT INTO usuarios (telegram_id, nome, username, authorized, codigo_casa)
+            VALUES ($1, $2, $3, TRUE, $4)
             ON CONFLICT (telegram_id) DO UPDATE
               SET nome = EXCLUDED.nome,
                   username = EXCLUDED.username,
-                  authorized = TRUE
-        """, str(telegram_id), nome, username)
+                  authorized = TRUE,
+                  codigo_casa = EXCLUDED.codigo_casa
+        """, str(telegram_id), nome, username, codigo_casa)
 
 
 async def get_all_authorized_users() -> list[str]:
@@ -87,11 +88,11 @@ async def insert_transacao(payload: dict):
 
             await conn.execute("""
                 INSERT INTO transacoes
-                  (telegram_user_id, tipo, categoria_text, subcategoria_text,
-                   escopo, descricao, valor, forma_pagamento, tipo_pagamento,
-                   parcelas_total, data_transacao, data_vencimento, banco,
-                   data_registro, criado_em, status, data_pagamento, cartao_id)
-                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)
+                (telegram_user_id, tipo, categoria_text, subcategoria_text,
+                escopo, descricao, valor, forma_pagamento, tipo_pagamento,
+                parcelas_total, data_transacao, data_vencimento, banco,
+                data_registro, criado_em, status, data_pagamento, cartao_id, codigo_casa)
+                VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
             """,
                 str(payload.get("telegram_user_id")),
                 payload.get("tipo"),
@@ -110,7 +111,8 @@ async def insert_transacao(payload: dict):
                 payload.get("criado_em"),
                 status_atual,
                 dt_pagamento,
-                payload.get("cartao_id")
+                payload.get("cartao_id"),
+                payload.get("codigo_casa")  # <--- NOVO CAMPO
             )
 
 
@@ -171,23 +173,23 @@ async def update_transacao_to_realizado(transacao_id: int, data_pagamento: date,
 
 
 async def get_pendentes_by_month(user_id: str, ano: int, mes: int):
+    casa = await get_user_casa(user_id)
     async with pool.acquire() as conn:
         rows = await conn.fetch("""
             SELECT * FROM transacoes
             WHERE status = 'previsto'
               AND (
-                  escopo = 'ambos'
-                  OR telegram_user_id = $1
+                  (escopo = 'ambos' AND codigo_casa = $4)
+                  OR (telegram_user_id = $1 AND escopo IS DISTINCT FROM 'ambos')
               )
               AND (
                   (data_vencimento IS NOT NULL AND EXTRACT(YEAR FROM data_vencimento) = $2 AND EXTRACT(MONTH FROM data_vencimento) = $3)
                   OR
                   (data_vencimento IS NULL AND EXTRACT(YEAR FROM data_transacao) = $2 AND EXTRACT(MONTH FROM data_transacao) = $3)
               )
-              -- se for 'ambos' e o usuário já confirmou, não é pendente para ele
               AND NOT (escopo = 'ambos' AND $1 = ANY(paid_by))
             ORDER BY COALESCE(data_vencimento, data_transacao)
-        """, str(user_id), ano, mes)
+        """, str(user_id), ano, mes, casa)
     return [dict(r) for r in rows]
 
 
@@ -214,6 +216,7 @@ def _to_date(value) -> date | None:
 
 
 async def _fetch_all_transacoes(telegram_user_id: str):
+    casa = await get_user_casa(telegram_user_id)
     async with pool.acquire() as conn:
         receitas = await conn.fetch(
             "SELECT * FROM transacoes WHERE telegram_user_id = $1 AND tipo = 'receita'", str(telegram_user_id)
@@ -221,8 +224,9 @@ async def _fetch_all_transacoes(telegram_user_id: str):
         desp_pessoal = await conn.fetch(
             "SELECT * FROM transacoes WHERE telegram_user_id = $1 AND tipo = 'despesa' AND escopo = 'pessoal'", str(telegram_user_id)
         )
+        # Despesas 'ambos' filtradas pela casa do usuário:
         desp_ambos = await conn.fetch(
-            "SELECT * FROM transacoes WHERE tipo = 'despesa' AND escopo = 'ambos'"
+            "SELECT * FROM transacoes WHERE tipo = 'despesa' AND escopo = 'ambos' AND codigo_casa = $1", casa
         )
     return [dict(r) for r in receitas], [dict(r) for r in desp_pessoal], [dict(r) for r in desp_ambos]
 
@@ -328,27 +332,27 @@ async def update_transacao_valor(transacao_id: int, novo_valor: float) -> None:
     async with pool.acquire() as conn:
         await conn.execute(query, novo_valor, transacao_id)
 
-async def criar_cartao(nome: str, limite: float, dia_fechamento: int, dia_vencimento: int):
+async def criar_cartao(nome: str, limite: float, dia_fechamento: int, dia_vencimento: int, codigo_casa: str = "CASA_1"):
     async with pool.acquire() as conn:
         return await conn.fetchrow(
             """
-            INSERT INTO cartoes_credito (nome, limite, dia_fechamento, dia_vencimento)
-            VALUES ($1, $2, $3, $4)
-            RETURNING id, nome, limite, dia_fechamento, dia_vencimento
+            INSERT INTO cartoes_credito (nome, limite, dia_fechamento, dia_vencimento, codigo_casa)
+            VALUES ($1, $2, $3, $4, $5)
+            RETURNING id, nome, limite, dia_fechamento, dia_vencimento, codigo_casa
             """,
-            nome, limite, dia_fechamento, dia_vencimento
+            nome, limite, dia_fechamento, dia_vencimento, codigo_casa
         )
 
-
-async def listar_cartoes_ativos():
+async def listar_cartoes_ativos(codigo_casa: str = "CASA_1"):
     async with pool.acquire() as conn:
         return await conn.fetch(
             """
             SELECT id, nome, limite, dia_fechamento, dia_vencimento
             FROM cartoes_credito
-            WHERE ativo = TRUE
+            WHERE ativo = TRUE AND codigo_casa = $1
             ORDER BY nome
-            """
+            """,
+            codigo_casa
         )
 
 
@@ -416,3 +420,22 @@ async def get_fatura_limite_info(cartao_id: int):
         "limite_usado_total": round(limite_usado_total, 2),
         "limite_disponivel": round(limite_disponivel, 2),
     }
+
+async def get_user_casa(telegram_id: str) -> str:
+    """Retorna o código da casa do usuário ou 'CASA_1' como fallback."""
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT codigo_casa FROM usuarios WHERE telegram_id = $1",
+            str(telegram_id)
+        )
+        return row["codigo_casa"] if row and row.get("codigo_casa") else "CASA_1"
+
+
+async def get_authorized_users_by_casa(codigo_casa: str) -> list[str]:
+    """Retorna apenas os usuários autorizados pertencentes à mesma casa."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT telegram_id FROM usuarios WHERE authorized = TRUE AND codigo_casa = $1",
+            codigo_casa
+        )
+        return [row['telegram_id'] for row in rows]

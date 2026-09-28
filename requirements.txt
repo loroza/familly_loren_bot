@@ -7,3 +7,4 @@ kaleido
 numpy
 pandas
 matplotlib
+bcrypt

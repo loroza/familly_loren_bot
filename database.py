@@ -5,6 +5,9 @@ from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
 from config import DATABASE_URL
 
+import bcrypt
+import uuid
+
 logger = logging.getLogger(__name__)
 pool: asyncpg.pool.Pool | None = None
 
@@ -439,3 +442,24 @@ async def get_authorized_users_by_casa(codigo_casa: str) -> list[str]:
             codigo_casa
         )
         return [row['telegram_id'] for row in rows]
+
+async def get_casa_by_senha(senha: str) -> str | None:
+    """Verifica se a senha já corresponde a alguma casa existente."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT codigo_casa, senha_hash FROM casas")
+    for row in rows:
+        if bcrypt.checkpw(senha.encode(), row["senha_hash"].encode()):
+            return row["codigo_casa"]
+    return None
+
+
+async def criar_casa(senha: str) -> str:
+    """Cria uma nova casa com a senha informada e retorna o código gerado."""
+    codigo_casa = str(uuid.uuid4())[:8].upper()
+    senha_hash = bcrypt.hashpw(senha.encode(), bcrypt.gensalt()).decode()
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "INSERT INTO casas (codigo_casa, senha_hash) VALUES ($1, $2)",
+            codigo_casa, senha_hash
+        )
+    return codigo_casa

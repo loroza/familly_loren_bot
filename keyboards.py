@@ -162,7 +162,7 @@ def payment_type_keyboard():
 
 def _get_emoji_for_category(value_obj):
     icon = value_obj.get("icon", "")
-    if isinstance(icon, str) and len(icon) <= 4:
+    if isinstance(icon, str) and len(icon) <= 5:
         return icon
 
     return ""

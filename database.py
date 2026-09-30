@@ -471,7 +471,8 @@ async def get_cartoes_by_casa(codigo_casa: str):
         WHERE codigo_casa = $1
         ORDER BY nome
     """
-    rows = await conn.fetch(query, codigo_casa)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(query, codigo_casa)
     return rows
 
 async def update_limite_cartao(cartao_id: int, codigo_casa: str, novo_limite: float):
@@ -480,7 +481,8 @@ async def update_limite_cartao(cartao_id: int, codigo_casa: str, novo_limite: fl
         SET limite = $1
         WHERE id = $2 AND codigo_casa = $3
     """
-    await conn.execute(query, novo_limite, cartao_id, codigo_casa)
+    async with pool.acquire() as conn:
+        await conn.execute(query, novo_limite, cartao_id, codigo_casa)
 
 async def update_dia_fechamento(cartao_id: int, codigo_casa: str, novo_dia: int):
     query = """
@@ -488,7 +490,8 @@ async def update_dia_fechamento(cartao_id: int, codigo_casa: str, novo_dia: int)
         SET dia_fechamento = $1
         WHERE id = $2 AND codigo_casa = $3
     """
-    await conn.execute(query, novo_dia, cartao_id, codigo_casa)
+    async with pool.acquire() as conn:
+        await conn.execute(query, novo_dia, cartao_id, codigo_casa)
 
 async def update_dia_vencimento(cartao_id: int, codigo_casa: str, novo_dia: int):
     query = """
@@ -496,4 +499,5 @@ async def update_dia_vencimento(cartao_id: int, codigo_casa: str, novo_dia: int)
         SET dia_vencimento = $1
         WHERE id = $2 AND codigo_casa = $3
     """
-    await conn.execute(query, novo_dia, cartao_id, codigo_casa)
+    async with pool.acquire() as conn:
+        await conn.execute(query, novo_dia, cartao_id, codigo_casa)

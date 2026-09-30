@@ -288,11 +288,13 @@ async def receive_card_due_day(
     data = await state.get_data()
 
     try:
+        codigo_casa = await database.get_user_casa(message.from_user.id)
         card = await database.criar_cartao(
             nome=data["card_name"],
             limite=data["card_limit"],
             dia_fechamento=data["card_closing_day"],
-            dia_vencimento=due_day
+            dia_vencimento=due_day,
+            codigo_casa=codigo_casa
         )
 
         if not card:
@@ -337,9 +339,9 @@ async def list_credit_cards(
     message: Message,
     state: FSMContext
 ):
-
     try:
-        cards = await database.listar_cartoes_ativos()
+        codigo_casa = await database.get_user_casa(message.from_user.id)
+        cards = await database.get_cartoes_by_casa(codigo_casa)
 
         if not cards:
             await message.answer(
@@ -378,13 +380,15 @@ async def list_credit_cards(
             "❌ Não foi possível consultar os cartões cadastrados.",
             reply_markup=keyboards.cartao_menu_keyboard()
         )
+
+
 class EditCartaoStates(StatesGroup):
     aguardando_valor = State()
 
 @router.callback_query(F.data == "editar_cartao")
 async def listar_cartoes_para_editar(callback: CallbackQuery, state: FSMContext):
-    data = await state.get_data()
-    codigo_casa = data.get("codigo_casa")
+    codigo_casa = await database.get_user_casa(callback.from_user.id)
+    await state.update_data(codigo_casa=codigo_casa)
     cartoes = await database.get_cartoes_by_casa(codigo_casa)
 
     if not cartoes:

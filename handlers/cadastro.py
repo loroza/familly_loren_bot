@@ -16,6 +16,9 @@ import database
 import keyboards
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+BR_TZ = ZoneInfo("America/Sao_Paulo")
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -34,6 +37,7 @@ class CadastroState(StatesGroup):
     categorizando_ofx_categoria = State()
     categorizando_ofx_subcategoria = State()
     categorizando_ofx_pagamento = State()
+    categorizando_ofx_descricao = State()
 
 
 def is_back_command(message: Message) -> bool:
@@ -556,6 +560,9 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
     importadas = 0
 
     for t in transacoes:
+
+        agora_br = datetime.now(BR_TZ)
+
         descricao = t["descricao"]
         valor = t["valor"]
         tipo = "receita" if valor > 0 else "despesa"
@@ -576,6 +583,11 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
             "status": "realizado",
             "data_pagamento": data_transacao,
             "codigo_casa": codigo_casa,
+            "data_registro": agora_br,
+            "criado_em": agora_br,
+            "cartao_id": None,
+            "parcelas_total": None,
+            "banco": None,
             "duplicata_info": duplicata,
         }
 
@@ -706,13 +718,12 @@ async def receber_subcategoria_ofx(message: Message, state: FSMContext):
         return
 
     atual["subcategoria_text"] = texto
-
     await state.update_data(fila_pendentes=fila)
-    await state.set_state(CadastroState.categorizando_ofx_pagamento)
+    await state.set_state(CadastroState.categorizando_ofx_descricao)
 
     await message.answer(
-        "Forma de pagamento:",
-        reply_markup=keyboards.payment_method_keyboard()
+        "Digite a descrição desta transação.\n"
+        "Envie '.' para manter a descrição original do extrato:"
     )
 
 
@@ -765,3 +776,39 @@ async def receber_pagamento_ofx(message: Message, state: FSMContext):
     await state.update_data(fila_pendentes=fila)
     await message.answer("✅ Transação categorizada com sucesso!")
     await continuar_categorizacao_ofx(message, state)
+
+
+@router.message(StateFilter(CadastroState.categorizando_ofx_descricao))
+async def receber_descricao_ofx(message: Message, state: FSMContext):
+    data = await state.get_data()
+    fila = data.get("fila_pendentes", [])
+
+    if not fila:
+        await state.set_state(CadastroState.viewing_registration_menu)
+        return
+
+    atual = fila[0]
+    texto = (message.text or "").strip()
+    tipo_categoria = "despesas" if atual["tipo"] == "despesa" else "receitas"
+
+    if texto == "⬅️ Voltar":
+        await state.set_state(CadastroState.categorizando_ofx_subcategoria)
+        await message.answer(
+            "Escolha a subcategoria:",
+            reply_markup=keyboards.get_subcategory_keyboard(
+                tipo_categoria,
+                atual["categoria_text"]
+            )
+        )
+        return
+
+    if texto and texto != ".":
+        atual["descricao"] = texto
+
+    await state.update_data(fila_pendentes=fila)
+    await state.set_state(CadastroState.categorizando_ofx_pagamento)
+
+    await message.answer(
+        "Forma de pagamento:",
+        reply_markup=keyboards.payment_method_keyboard()
+    )

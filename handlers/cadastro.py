@@ -14,6 +14,8 @@ from ofxparse import OfxParser
 
 import database
 import keyboards
+import re
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 router = Router()
@@ -78,6 +80,48 @@ def parse_day(value: str) -> int | None:
 
     except ValueError:
         return None
+
+
+def parse_ofx_transacoes(conteudo: str) -> list[dict]:
+    """
+    Parser simples e resistente para OFX 1.0 (SGML), tolerante a tags vazias
+    (ex: <NAME></NAME>), que quebram bibliotecas como ofxparse.
+    """
+    blocos = re.findall(r"<STMTTRN>(.*?)</STMTTRN>", conteudo, re.DOTALL | re.IGNORECASE)
+    transacoes = []
+
+    def extrair_tag(bloco: str, tag: str) -> str:
+        m = re.search(rf"<{tag}>(.*?)(?:</{tag}>|\n|$)", bloco, re.IGNORECASE)
+        return m.group(1).strip() if m else ""
+
+    for bloco in blocos:
+        dtposted = extrair_tag(bloco, "DTPOSTED")
+        trnamt = extrair_tag(bloco, "TRNAMT")
+        memo = extrair_tag(bloco, "MEMO")
+        name = extrair_tag(bloco, "NAME")
+        fitid = extrair_tag(bloco, "FITID")
+        trntype = extrair_tag(bloco, "TRNTYPE")
+
+        if not dtposted or not trnamt:
+            continue
+
+        try:
+            data_transacao = datetime.strptime(dtposted[:8], "%Y%m%d").date()
+            valor = float(trnamt)
+        except (ValueError, TypeError):
+            continue
+
+        descricao = memo or name or "Sem descrição"
+
+        transacoes.append({
+            "fitid": fitid,
+            "tipo_ofx": trntype,
+            "valor": valor,
+            "data_transacao": data_transacao,
+            "descricao": descricao,
+        })
+
+    return transacoes
 
 
 @router.message(F.text == "📲 Cadastro")
@@ -492,24 +536,28 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
     await message.bot.download_file(file.file_path, destination=file_path)
 
     try:
-        with open(file_path, "rb") as f:
-            ofx = OfxParser.parse(f)
+        with open(file_path, "r", encoding="latin-1", errors="ignore") as f:
+            conteudo = f.read()
+        transacoes = parse_ofx_transacoes(conteudo)
     except Exception:
         logger.exception("Erro ao interpretar OFX")
         await message.answer("❌ Não consegui ler esse arquivo. Verifique se é um .ofx válido.")
         return
 
-    transacoes = ofx.account.statement.transactions
+    if not transacoes:
+        await message.answer("❌ Nenhuma transação encontrada nesse arquivo.")
+        return
+
     codigo_casa = await database.get_user_casa(message.from_user.id)
 
     fila_pendentes = []
     importadas = 0
 
     for t in transacoes:
-        descricao = t.memo or t.payee or "Sem descrição"
-        valor = float(t.amount)
+        descricao = t["descricao"]
+        valor = t["valor"]
         tipo = "receita" if valor > 0 else "despesa"
-        data_transacao = t.date.date()
+        data_transacao = t["data_transacao"]
 
         conhecida = await database.buscar_categoria_aprendida(codigo_casa, descricao)
         duplicata = await database.verificar_possivel_duplicata(codigo_casa, abs(valor), data_transacao)
@@ -529,7 +577,6 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
             "duplicata_info": duplicata,
         }
 
-        # Se já tem categoria conhecida E não há suspeita de duplicata -> importa direto
         if conhecida and not duplicata:
             payload["categoria_text"] = conhecida["categoria_text"]
             payload["subcategoria_text"] = conhecida["subcategoria_text"]
@@ -537,7 +584,6 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
             await database.insert_transacao(payload)
             importadas += 1
         else:
-            # Categoria desconhecida OU suspeita de duplicata -> revisão manual
             if conhecida:
                 payload["categoria_text"] = conhecida["categoria_text"]
                 payload["subcategoria_text"] = conhecida["subcategoria_text"]
@@ -556,7 +602,7 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
     )
 
     await continuar_categorizacao_ofx(message, state)
-
+    
 
 async def continuar_categorizacao_ofx(message: Message, state: FSMContext):
     data = await state.get_data()

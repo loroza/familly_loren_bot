@@ -844,8 +844,8 @@ def detectar_estornos(transacoes: list[dict]) -> list[dict]:
     Marca transações como possível estorno:
     1) por palavra-chave na descrição, ou
     2) por pareamento: uma CREDIT de mesmo valor absoluto aparecendo perto
-       (mesmo dia ou até 5 dias depois) de uma PAYMENT/DEBIT, com nome/descrição parecidos.
-    """Que
+    (mesmo dia ou até 5 dias depois) de uma PAYMENT/DEBIT, com nome/descrição parecidos.
+    """
 
     for t in transacoes:
         t["possivel_estorno"] = eh_estorno_por_palavra_chave(t["descricao"])

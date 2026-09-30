@@ -370,7 +370,7 @@ async def list_credit_cards(
 
         await message.answer(
             "\n".join(lines),
-            reply_markup=keyboards.cartao_menu_keyboard()
+            reply_markup=keyboards.kb_editar_cartao_botao()
         )
 
     except Exception:

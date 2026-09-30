@@ -335,6 +335,12 @@ def realizar_pagamento_inline_keyboard(transacao_id: int):
     )
 
 
+def kb_editar_cartao_botao():
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✏️ Editar Cartão", callback_data="editar_cartao")
+    builder.adjust(1)
+    return builder.as_markup()
+
 def kb_lista_cartoes_editar(cartoes):
     builder = InlineKeyboardBuilder()
     for cartao in cartoes:

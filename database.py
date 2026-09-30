@@ -463,3 +463,37 @@ async def criar_casa(senha: str) -> str:
             codigo_casa, senha_hash
         )
     return codigo_casa
+
+async def get_cartoes_by_casa(codigo_casa: str):
+    query = """
+        SELECT id, nome, limite, dia_fechamento, dia_vencimento
+        FROM cartoes_credito
+        WHERE codigo_casa = $1
+        ORDER BY nome
+    """
+    rows = await conn.fetch(query, codigo_casa)
+    return rows
+
+async def update_limite_cartao(cartao_id: int, codigo_casa: str, novo_limite: float):
+    query = """
+        UPDATE cartoes_credito
+        SET limite = $1
+        WHERE id = $2 AND codigo_casa = $3
+    """
+    await conn.execute(query, novo_limite, cartao_id, codigo_casa)
+
+async def update_dia_fechamento(cartao_id: int, codigo_casa: str, novo_dia: int):
+    query = """
+        UPDATE cartoes_credito
+        SET dia_fechamento = $1
+        WHERE id = $2 AND codigo_casa = $3
+    """
+    await conn.execute(query, novo_dia, cartao_id, codigo_casa)
+
+async def update_dia_vencimento(cartao_id: int, codigo_casa: str, novo_dia: int):
+    query = """
+        UPDATE cartoes_credito
+        SET dia_vencimento = $1
+        WHERE id = $2 AND codigo_casa = $3
+    """
+    await conn.execute(query, novo_dia, cartao_id, codigo_casa)

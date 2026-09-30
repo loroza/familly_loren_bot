@@ -8,6 +8,7 @@ from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
+from aiogram.types import CallbackQuery, Message
 
 import database
 import keyboards
@@ -377,3 +378,72 @@ async def list_credit_cards(
             "❌ Não foi possível consultar os cartões cadastrados.",
             reply_markup=keyboards.cartao_menu_keyboard()
         )
+class EditCartaoStates(StatesGroup):
+    aguardando_valor = State()
+
+@router.callback_query(F.data == "editar_cartao")
+async def listar_cartoes_para_editar(callback: CallbackQuery, state: FSMContext):
+    data = await state.get_data()
+    codigo_casa = data.get("codigo_casa")
+    cartoes = await database.get_cartoes_by_casa(codigo_casa)
+
+    if not cartoes:
+        await callback.message.edit_text("Você ainda não tem cartões cadastrados.")
+        return
+
+    await callback.message.edit_text(
+        "Selecione o cartão que deseja editar:",
+        reply_markup=keyboards.kb_lista_cartoes_editar(cartoes)
+    )
+
+@router.callback_query(F.data.startswith("editcard_"))
+async def escolher_campo(callback: CallbackQuery):
+    cartao_id = int(callback.data.split("_")[1])
+    await callback.message.edit_text(
+        "O que deseja alterar neste cartão?",
+        reply_markup=keyboards.kb_campo_editar(cartao_id)
+    )
+
+@router.callback_query(F.data.startswith("editfield_"))
+async def solicitar_novo_valor(callback: CallbackQuery, state: FSMContext):
+    _, campo, cartao_id = callback.data.split("_")
+    await state.update_data(campo_edicao=campo, cartao_id=int(cartao_id))
+    await state.set_state(EditCartaoStates.aguardando_valor)
+
+    mensagens = {
+        "limite": "Digite o novo limite (ex: 5000.00):",
+        "fechamento": "Digite o novo dia de fechamento da fatura (1 a 31):",
+        "vencimento": "Digite o novo dia de vencimento da fatura (1 a 31):"
+    }
+    await callback.message.edit_text(mensagens[campo])
+
+@router.message(StateFilter(EditCartaoStates.aguardando_valor))
+async def salvar_novo_valor(message: Message, state: FSMContext):
+    data = await state.get_data()
+    campo = data["campo_edicao"]
+    cartao_id = data["cartao_id"]
+    codigo_casa = data.get("codigo_casa")
+
+    try:
+        if campo == "limite":
+            novo_valor = float(message.text.replace(",", "."))
+            await database.update_limite_cartao(cartao_id, codigo_casa, novo_valor)
+            texto_confirmacao = f"Limite atualizado para R$ {novo_valor:.2f}."
+
+        elif campo in ("fechamento", "vencimento"):
+            novo_dia = int(message.text)
+            if not (1 <= novo_dia <= 31):
+                await message.answer("Digite um dia válido entre 1 e 31.")
+                return
+            if campo == "fechamento":
+                await database.update_dia_fechamento(cartao_id, codigo_casa, novo_dia)
+            else:
+                await database.update_dia_vencimento(cartao_id, codigo_casa, novo_dia)
+            texto_confirmacao = f"Dia de {campo} atualizado para {novo_dia}."
+
+    except ValueError:
+        await message.answer("Valor inválido. Tente novamente.")
+        return
+
+    await state.clear()
+    await message.answer(f"✅ {texto_confirmacao}")

@@ -9,6 +9,7 @@ from aiogram.types import (
     InlineKeyboardButton
 )
 from utils.loader import load_categories
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 CALLBACK_MAP = {}
 MAX_CB_LEN = 64
@@ -332,3 +333,24 @@ def realizar_pagamento_inline_keyboard(transacao_id: int):
             ]
         ]
     )
+
+
+def kb_lista_cartoes_editar(cartoes):
+    builder = InlineKeyboardBuilder()
+    for cartao in cartoes:
+        builder.button(
+            text=f"{cartao['nome']} (limite: R${cartao['limite']:.2f})",
+            callback_data=f"editcard_{cartao['id']}"
+        )
+    builder.button(text="« Voltar", callback_data="menu_principal")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def kb_campo_editar(cartao_id):
+    builder = InlineKeyboardBuilder()
+    builder.button(text="Editar Limite", callback_data=f"editfield_limite_{cartao_id}")
+    builder.button(text="Editar Dia de Fechamento", callback_data=f"editfield_fechamento_{cartao_id}")
+    builder.button(text="Editar Dia de Vencimento", callback_data=f"editfield_vencimento_{cartao_id}")
+    builder.button(text="« Voltar", callback_data="editar_cartao")
+    builder.adjust(1)
+    return builder.as_markup()

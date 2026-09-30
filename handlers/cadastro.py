@@ -16,7 +16,7 @@ import database
 import keyboards
 import re
 from datetime import datetime
-from zoneinfo import 
+from zoneinfo import ZoneInfo
 
 from database import normalizar_descricao
 

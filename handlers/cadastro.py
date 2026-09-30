@@ -16,7 +16,9 @@ import database
 import keyboards
 import re
 from datetime import datetime
-from zoneinfo import ZoneInfo
+from zoneinfo import 
+
+from database import normalizar_descricao
 
 BR_TZ = ZoneInfo("America/Sao_Paulo")
 
@@ -832,7 +834,7 @@ async def receber_descricao_ofx(message: Message, state: FSMContext):
     )
 
 def eh_estorno_por_palavra_chave(descricao: str) -> bool:
-    chave = normalizar_descricao(descricao)  # já existe em database.py, pode importar de lá
+    chave = normalizar_descricao(descricao)
     termos = ["estorno", "reembolso", "devolucao", "cancelamento", "chargeback", "ressarcimento"]
     return any(termo in chave for termo in termos)
 
@@ -843,8 +845,7 @@ def detectar_estornos(transacoes: list[dict]) -> list[dict]:
     1) por palavra-chave na descrição, ou
     2) por pareamento: uma CREDIT de mesmo valor absoluto aparecendo perto
        (mesmo dia ou até 5 dias depois) de uma PAYMENT/DEBIT, com nome/descrição parecidos.
-    """
-    from database import normalizar_descricao
+    """Que
 
     for t in transacoes:
         t["possivel_estorno"] = eh_estorno_por_palavra_chave(t["descricao"])

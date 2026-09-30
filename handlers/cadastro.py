@@ -38,6 +38,7 @@ class CadastroState(StatesGroup):
     categorizando_ofx_subcategoria = State()
     categorizando_ofx_pagamento = State()
     categorizando_ofx_descricao = State()
+    confirmando_estorno_ofx = State()
 
 
 def is_back_command(message: Message) -> bool:
@@ -533,6 +534,10 @@ async def cancel_ofx_import(message: Message, state: FSMContext):
 async def processar_arquivo_ofx(message: Message, state: FSMContext):
     document: Document = message.document
 
+    fila_estornos = []
+    fila_pendentes = []
+    importadas = 0
+
     if not document.file_name.lower().endswith(".ofx"):
         await message.answer("❌ Envie um arquivo com extensão .ofx")
         return
@@ -545,6 +550,7 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
         with open(file_path, "r", encoding="latin-1", errors="ignore") as f:
             conteudo = f.read()
         transacoes = parse_ofx_transacoes(conteudo)
+        transacoes = detectar_estornos(transacoes)
     except Exception:
         logger.exception("Erro ao interpretar OFX")
         await message.answer("❌ Não consegui ler esse arquivo. Verifique se é um .ofx válido.")
@@ -560,6 +566,13 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
     importadas = 0
 
     for t in transacoes:
+
+        if t.get("possivel_estorno"):
+            payload["estorno_info"] = {
+                "motivo": t.get("motivo_estorno", "Possível estorno ou transação pareada")
+            }
+            fila_estornos.append(payload)
+            continue
 
         agora_br = datetime.now(BR_TZ)
 
@@ -605,14 +618,18 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
             fila_pendentes.append(payload)
 
     await state.update_data(
+        fila_estornos=fila_estornos,
         fila_pendentes=fila_pendentes,
         codigo_casa=codigo_casa,
         importadas=importadas
     )
 
+    await continuar_revisao_estornos_ofx(message, state)
+
     await message.answer(
         f"✅ {importadas} transações importadas automaticamente.\n"
-        f"⚠️ {len(fila_pendentes)} precisam de revisão (categoria nova ou possível duplicata)."
+        f"⚠️ {len(fila_pendentes)} precisam de revisão (categoria nova ou possível duplicata).\n"
+        f"🔄 {estornos_ignorados} estornos/cancelamentos identificados e ignorados automaticamente."
     )
 
     await continuar_categorizacao_ofx(message, state)
@@ -761,6 +778,7 @@ async def receber_pagamento_ofx(message: Message, state: FSMContext):
         return
 
     atual = fila.pop(0)
+    atual.pop("estorno_info", None)
     atual.pop("duplicata_info", None)
     atual["forma_pagamento"] = texto
 
@@ -812,3 +830,104 @@ async def receber_descricao_ofx(message: Message, state: FSMContext):
         "Forma de pagamento:",
         reply_markup=keyboards.payment_method_keyboard()
     )
+
+def eh_estorno_por_palavra_chave(descricao: str) -> bool:
+    chave = normalizar_descricao(descricao)  # já existe em database.py, pode importar de lá
+    termos = ["estorno", "reembolso", "devolucao", "cancelamento", "chargeback", "ressarcimento"]
+    return any(termo in chave for termo in termos)
+
+
+def detectar_estornos(transacoes: list[dict]) -> list[dict]:
+    """
+    Marca transações como possível estorno:
+    1) por palavra-chave na descrição, ou
+    2) por pareamento: uma CREDIT de mesmo valor absoluto aparecendo perto
+       (mesmo dia ou até 5 dias depois) de uma PAYMENT/DEBIT, com nome/descrição parecidos.
+    """
+    from database import normalizar_descricao
+
+    for t in transacoes:
+        t["possivel_estorno"] = eh_estorno_por_palavra_chave(t["descricao"])
+
+    # Pareamento: procura débito seguido de crédito de mesmo valor, descrição parecida
+    for i, t in enumerate(transacoes):
+        if t["valor"] >= 0 or t["possivel_estorno"]:
+            continue  # só interessa despesas ainda não marcadas
+
+        chave_t = normalizar_descricao(t["descricao"])[:15]  # primeiros termos já bastam
+
+        for outro in transacoes:
+            if outro is t or outro["valor"] <= 0:
+                continue
+
+            diff_dias = abs((outro["data_transacao"] - t["data_transacao"]).days)
+            mesmo_valor = abs(abs(outro["valor"]) - abs(t["valor"])) < 0.01
+            chave_outro = normalizar_descricao(outro["descricao"])[:15]
+
+            if mesmo_valor and diff_dias <= 5 and (chave_t in chave_outro or chave_outro in chave_t or chave_t == chave_outro):
+                t["possivel_estorno"] = True
+                outro["possivel_estorno"] = True
+                break
+
+    return transacoes
+
+async def continuar_revisao_estornos_ofx(message: Message, state: FSMContext):
+    data = await state.get_data()
+    fila_estornos = data.get("fila_estornos", [])
+
+    if not fila_estornos:
+        await continuar_categorizacao_ofx(message, state)
+        return
+
+    atual = fila_estornos[0]
+    info = atual.get("estorno_info") or {}
+    motivo = info.get("motivo", "Possível estorno")
+
+    await state.set_state(CadastroState.confirmando_estorno_ofx)
+    await message.answer(
+        f"⚠️ Esta transação pode ser um estorno.\n\n"
+        f"📝 {atual['descricao']}\n"
+        f"💰 R$ {atual['valor']:.2f}\n"
+        f"📅 {atual['data_transacao']}\n"
+        f"🔎 Indício: {motivo}\n\n"
+        "Deseja incluir para revisar ou ignorar?",
+        reply_markup=keyboards.confirmacao_estorno_keyboard()
+    )
+
+
+@router.message(StateFilter(CadastroState.confirmando_estorno_ofx))
+async def confirmar_estorno_ofx(message: Message, state: FSMContext):
+    data = await state.get_data()
+    fila_estornos = data.get("fila_estornos", [])
+    fila_pendentes = data.get("fila_pendentes", [])
+
+    if not fila_estornos:
+        await continuar_revisao_estornos_ofx(message, state)
+        return
+
+    texto = (message.text or "").strip()
+    atual = fila_estornos.pop(0)
+
+    if texto == "✅ Incluir mesmo assim":
+        # Remove o campo auxiliar, que não pertence à tabela transacoes.
+        atual.pop("estorno_info", None)
+        # Mesmo que a categoria já seja conhecida, passa pela revisão normal.
+        fila_pendentes.insert(0, atual)
+        resposta = "✅ Incluída na fila de revisão."
+    elif texto == "⏭️ Ignorar possível estorno":
+        resposta = "⏭️ Transação ignorada."
+    else:
+        fila_estornos.insert(0, atual)
+        await state.update_data(fila_estornos=fila_estornos)
+        await message.answer(
+            "Escolha uma das opções do teclado.",
+            reply_markup=keyboards.confirmacao_estorno_keyboard()
+        )
+        return
+
+    await state.update_data(
+        fila_estornos=fila_estornos,
+        fila_pendentes=fila_pendentes
+    )
+    await message.answer(resposta)
+    await continuar_revisao_estornos_ofx(message, state)

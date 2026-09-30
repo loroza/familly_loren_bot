@@ -366,3 +366,15 @@ def get_main_category_keyboard_com_pular(tipo: str):
     kb = get_main_category_keyboard(tipo)
     kb.keyboard.insert(0, [KeyboardButton(text="⏭️ Pular esta transação")])
     return kb
+
+def confirmacao_estorno_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [
+                KeyboardButton(text="✅ Incluir mesmo assim"),
+                KeyboardButton(text="⏭️ Ignorar possível estorno"),
+            ]
+        ],
+        resize_keyboard=True,
+        one_time_keyboard=True
+    )

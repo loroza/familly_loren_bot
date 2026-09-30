@@ -31,7 +31,9 @@ class CadastroState(StatesGroup):
     waiting_for_card_due_day = State()
 
     waiting_for_ofx_file = State()
-    categorizando_ofx = State()
+    categorizando_ofx_categoria = State()
+    categorizando_ofx_subcategoria = State()
+    categorizando_ofx_pagamento = State()
 
 
 def is_back_command(message: Message) -> bool:
@@ -602,7 +604,7 @@ async def processar_arquivo_ofx(message: Message, state: FSMContext):
     )
 
     await continuar_categorizacao_ofx(message, state)
-    
+
 
 async def continuar_categorizacao_ofx(message: Message, state: FSMContext):
     data = await state.get_data()
@@ -617,7 +619,7 @@ async def continuar_categorizacao_ofx(message: Message, state: FSMContext):
         return
 
     atual = fila[0]
-    await state.set_state(CadastroState.categorizando_ofx)
+    await state.set_state(CadastroState.categorizando_ofx_categoria)
 
     duplicata = atual.get("duplicata_info")
     aviso_duplicata = ""
@@ -630,24 +632,92 @@ async def continuar_categorizacao_ofx(message: Message, state: FSMContext):
             f"Se for a mesma despesa/receita, toque em ⏭️ Pular esta transação.\n"
         )
 
-    categoria_sugerida = ""
-    if atual.get("categoria_text"):
-        categoria_sugerida = f"\n💡 Categoria sugerida: {atual['categoria_text']}"
+    tipo_categoria = "despesas" if atual["tipo"] == "despesa" else "receitas"
 
     await message.answer(
         f"Revise esta transação:\n\n"
         f"📝 {atual['descricao']}\n"
         f"💰 R$ {atual['valor']:.2f}\n"
         f"📅 {atual['data_transacao']}"
-        f"{aviso_duplicata}"
-        f"{categoria_sugerida}\n\n"
+        f"{aviso_duplicata}\n\n"
         f"Escolha a categoria ou pule:",
-        reply_markup=keyboards.get_main_category_keyboard_com_pular(atual["tipo"])
+        reply_markup=keyboards.get_main_category_keyboard_com_pular(tipo_categoria)
     )
 
 
-@router.message(StateFilter(CadastroState.categorizando_ofx))
+@router.message(StateFilter(CadastroState.categorizando_ofx_categoria))
 async def receber_categoria_ofx(message: Message, state: FSMContext):
+    data = await state.get_data()
+    fila = data.get("fila_pendentes", [])
+
+    if not fila:
+        await state.set_state(CadastroState.viewing_registration_menu)
+        return
+
+    texto = (message.text or "").strip()
+
+    if texto == "⏭️ Pular esta transação":
+        fila.pop(0)
+        await state.update_data(fila_pendentes=fila)
+        await message.answer("⏭️ Transação ignorada (não cadastrada).")
+        await continuar_categorizacao_ofx(message, state)
+        return
+
+    if texto == "⬅️ Voltar":
+        await state.set_state(CadastroState.viewing_registration_menu)
+        await message.answer(
+            "📲 Cadastro\n\nEscolha o tipo de parâmetro que deseja cadastrar:",
+            reply_markup=keyboards.cadastro_menu_keyboard()
+        )
+        return
+
+    atual = fila[0]
+    atual["categoria_text"] = texto
+    tipo_categoria = "despesas" if atual["tipo"] == "despesa" else "receitas"
+
+    await state.update_data(fila_pendentes=fila)
+    await state.set_state(CadastroState.categorizando_ofx_subcategoria)
+
+    await message.answer(
+        "Escolha a subcategoria:",
+        reply_markup=keyboards.get_subcategory_keyboard(tipo_categoria, texto)
+    )
+
+
+@router.message(StateFilter(CadastroState.categorizando_ofx_subcategoria))
+async def receber_subcategoria_ofx(message: Message, state: FSMContext):
+    data = await state.get_data()
+    fila = data.get("fila_pendentes", [])
+
+    if not fila:
+        await state.set_state(CadastroState.viewing_registration_menu)
+        return
+
+    texto = (message.text or "").strip()
+    atual = fila[0]
+    tipo_categoria = "despesas" if atual["tipo"] == "despesa" else "receitas"
+
+    if texto == "⬅️ Voltar":
+        await state.set_state(CadastroState.categorizando_ofx_categoria)
+        await message.answer(
+            "Escolha a categoria ou pule:",
+            reply_markup=keyboards.get_main_category_keyboard_com_pular(tipo_categoria)
+        )
+        return
+
+    atual["subcategoria_text"] = texto
+
+    await state.update_data(fila_pendentes=fila)
+    await state.set_state(CadastroState.categorizando_ofx_pagamento)
+
+    await message.answer(
+        "Forma de pagamento:",
+        reply_markup=keyboards.payment_method_keyboard()
+    )
+
+
+@router.message(StateFilter(CadastroState.categorizando_ofx_pagamento))
+async def receber_pagamento_ofx(message: Message, state: FSMContext):
     data = await state.get_data()
     fila = data.get("fila_pendentes", [])
     codigo_casa = data.get("codigo_casa")
@@ -656,31 +726,42 @@ async def receber_categoria_ofx(message: Message, state: FSMContext):
         await state.set_state(CadastroState.viewing_registration_menu)
         return
 
-    atual = fila.pop(0)
     texto = (message.text or "").strip()
+    atual = fila[0]
+    tipo_categoria = "despesas" if atual["tipo"] == "despesa" else "receitas"
 
-    if texto == "⏭️ Pular esta transação":
-        await state.update_data(fila_pendentes=fila)
-        await message.answer("⏭️ Transação ignorada (não cadastrada).")
-        await continuar_categorizacao_ofx(message, state)
+    if texto == "⬅️ Voltar":
+        await state.set_state(CadastroState.categorizando_ofx_subcategoria)
+        await message.answer(
+            "Escolha a subcategoria:",
+            reply_markup=keyboards.get_subcategory_keyboard(tipo_categoria, atual["categoria_text"])
+        )
         return
 
-    if is_back_command(message):
-        await state.update_data(fila_pendentes=fila)
-        await message.answer("⏭️ Transação ignorada (não cadastrada).")
-        await continuar_categorizacao_ofx(message, state)
+    valid_options = [
+        "💳 Cartão de Crédito",
+        "💳 Cartão de Débito",
+        "💸 Pix / Dinheiro",
+        "📄 Boleto",
+        "🔄 Débito Automático",
+    ]
+    if texto not in valid_options:
+        await message.answer("❌ Escolha uma opção do teclado para a forma de pagamento.")
         return
 
+    atual = fila.pop(0)
     atual.pop("duplicata_info", None)
-    categoria = texto
-    atual["categoria_text"] = categoria
-    atual["subcategoria_text"] = None
-    atual["forma_pagamento"] = atual.get("forma_pagamento") or "Pix / Dinheiro"
+    atual["forma_pagamento"] = texto
 
     await database.insert_transacao(atual)
     await database.salvar_categoria_aprendida(
-        codigo_casa, atual["descricao"], categoria, None, atual["forma_pagamento"]
+        codigo_casa,
+        atual["descricao"],
+        atual["categoria_text"],
+        atual["subcategoria_text"],
+        atual["forma_pagamento"]
     )
 
     await state.update_data(fila_pendentes=fila)
+    await message.answer("✅ Transação categorizada com sucesso!")
     await continuar_categorizacao_ofx(message, state)

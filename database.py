@@ -8,6 +8,8 @@ from config import DATABASE_URL
 import bcrypt
 import uuid
 
+import unicodedata
+
 logger = logging.getLogger(__name__)
 pool: asyncpg.pool.Pool | None = None
 
@@ -501,3 +503,47 @@ async def update_dia_vencimento(cartao_id: int, codigo_casa: str, novo_dia: int)
     """
     async with pool.acquire() as conn:
         await conn.execute(query, novo_dia, cartao_id, codigo_casa)
+
+
+def normalizar_descricao(texto: str) -> str:
+    texto = (texto or "").strip().lower()
+    texto = unicodedata.normalize("NFKD", texto)
+    texto = "".join(c for c in texto if not unicodedata.combining(c))
+    return texto
+
+
+async def buscar_categoria_aprendida(codigo_casa: str, descricao: str) -> dict | None:
+    chave = normalizar_descricao(descricao)
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT categoria_text, subcategoria_text, forma_pagamento
+            FROM categorias_aprendidas
+            WHERE codigo_casa = $1 AND descricao_chave = $2
+        """, codigo_casa, chave)
+    return dict(row) if row else None
+
+
+async def salvar_categoria_aprendida(codigo_casa: str, descricao: str, categoria: str, subcategoria: str | None, forma_pagamento: str | None):
+    chave = normalizar_descricao(descricao)
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            INSERT INTO categorias_aprendidas (codigo_casa, descricao_chave, categoria_text, subcategoria_text, forma_pagamento)
+            VALUES ($1, $2, $3, $4, $5)
+            ON CONFLICT (codigo_casa, descricao_chave) DO UPDATE
+              SET categoria_text = EXCLUDED.categoria_text,
+                  subcategoria_text = EXCLUDED.subcategoria_text,
+                  forma_pagamento = EXCLUDED.forma_pagamento
+        """, codigo_casa, chave, categoria, subcategoria, forma_pagamento)
+
+
+async def verificar_possivel_duplicata(codigo_casa: str, valor: float, data_transacao, dias_tolerancia: int = 3) -> dict | None:
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT id, descricao, valor, data_transacao, categoria_text
+            FROM transacoes
+            WHERE codigo_casa = $1
+              AND ABS(valor - $2) < 0.01
+              AND data_transacao BETWEEN $3::date - $4::int AND $3::date + $4::int
+            LIMIT 1
+        """, codigo_casa, valor, data_transacao, dias_tolerancia)
+    return dict(row) if row else None

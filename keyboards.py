@@ -77,6 +77,7 @@ def cadastro_menu_keyboard():
     return ReplyKeyboardMarkup(
         keyboard=[
             [KeyboardButton(text="💳 Cartão de Crédito")],
+            [KeyboardButton(text="📥 Importar Extrato (.ofx)")],
             [KeyboardButton(text="⬅️ Voltar")]
         ],
         resize_keyboard=True
@@ -360,3 +361,8 @@ def kb_campo_editar(cartao_id):
     builder.button(text="« Voltar", callback_data="editar_cartao")
     builder.adjust(1)
     return builder.as_markup()
+
+def get_main_category_keyboard_com_pular(tipo: str):
+    kb = get_main_category_keyboard(tipo)
+    kb.keyboard.insert(0, [KeyboardButton(text="⏭️ Pular esta transação")])
+    return kb

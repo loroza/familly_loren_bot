@@ -8,7 +8,9 @@ from aiogram.types import Message
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.filters import StateFilter
-from aiogram.types import CallbackQuery, Message
+from aiogram.types import CallbackQuery, Message, Document
+
+from ofxparse import OfxParser
 
 import database
 import keyboards
@@ -25,6 +27,9 @@ class CadastroState(StatesGroup):
     waiting_for_card_limit = State()
     waiting_for_card_closing_day = State()
     waiting_for_card_due_day = State()
+
+    waiting_for_ofx_file = State()
+    categorizando_ofx = State()
 
 
 def is_back_command(message: Message) -> bool:
@@ -451,3 +456,185 @@ async def salvar_novo_valor(message: Message, state: FSMContext):
 
     await state.clear()
     await message.answer(f"✅ {texto_confirmacao}")
+
+
+@router.message(
+    StateFilter(CadastroState.viewing_registration_menu),
+    F.text == "📥 Importar Extrato (.ofx)"
+)
+async def start_ofx_import(message: Message, state: FSMContext):
+    await state.set_state(CadastroState.waiting_for_ofx_file)
+    await message.answer(
+        "📥 Envie o arquivo .ofx exportado pelo seu banco.\n\n"
+        "Use ⬅️ Voltar para cancelar."
+    )
+
+
+@router.message(StateFilter(CadastroState.waiting_for_ofx_file), F.text == "⬅️ Voltar")
+async def cancel_ofx_import(message: Message, state: FSMContext):
+    await state.set_state(CadastroState.viewing_registration_menu)
+    await message.answer(
+        "📲 Cadastro\n\nEscolha o tipo de parâmetro que deseja cadastrar:",
+        reply_markup=keyboards.cadastro_menu_keyboard()
+    )
+
+
+@router.message(StateFilter(CadastroState.waiting_for_ofx_file), F.document)
+async def processar_arquivo_ofx(message: Message, state: FSMContext):
+    document: Document = message.document
+
+    if not document.file_name.lower().endswith(".ofx"):
+        await message.answer("❌ Envie um arquivo com extensão .ofx")
+        return
+
+    file = await message.bot.get_file(document.file_id)
+    file_path = f"/tmp/{document.file_unique_id}.ofx"
+    await message.bot.download_file(file.file_path, destination=file_path)
+
+    try:
+        with open(file_path, "rb") as f:
+            ofx = OfxParser.parse(f)
+    except Exception:
+        logger.exception("Erro ao interpretar OFX")
+        await message.answer("❌ Não consegui ler esse arquivo. Verifique se é um .ofx válido.")
+        return
+
+    transacoes = ofx.account.statement.transactions
+    codigo_casa = await database.get_user_casa(message.from_user.id)
+
+    fila_pendentes = []
+    importadas = 0
+
+    for t in transacoes:
+        descricao = t.memo or t.payee or "Sem descrição"
+        valor = float(t.amount)
+        tipo = "receita" if valor > 0 else "despesa"
+        data_transacao = t.date.date()
+
+        conhecida = await database.buscar_categoria_aprendida(codigo_casa, descricao)
+        duplicata = await database.verificar_possivel_duplicata(codigo_casa, abs(valor), data_transacao)
+
+        payload = {
+            "telegram_user_id": message.from_user.id,
+            "tipo": tipo,
+            "descricao": descricao,
+            "valor": abs(valor),
+            "data_transacao": data_transacao,
+            "data_vencimento": data_transacao,
+            "escopo": "pessoal",
+            "tipo_pagamento": "avista",
+            "status": "realizado",
+            "data_pagamento": data_transacao,
+            "codigo_casa": codigo_casa,
+            "duplicata_info": duplicata,
+        }
+
+        # Se já tem categoria conhecida E não há suspeita de duplicata -> importa direto
+        if conhecida and not duplicata:
+            payload["categoria_text"] = conhecida["categoria_text"]
+            payload["subcategoria_text"] = conhecida["subcategoria_text"]
+            payload["forma_pagamento"] = conhecida["forma_pagamento"]
+            await database.insert_transacao(payload)
+            importadas += 1
+        else:
+            # Categoria desconhecida OU suspeita de duplicata -> revisão manual
+            if conhecida:
+                payload["categoria_text"] = conhecida["categoria_text"]
+                payload["subcategoria_text"] = conhecida["subcategoria_text"]
+                payload["forma_pagamento"] = conhecida["forma_pagamento"]
+            fila_pendentes.append(payload)
+
+    await state.update_data(
+        fila_pendentes=fila_pendentes,
+        codigo_casa=codigo_casa,
+        importadas=importadas
+    )
+
+    await message.answer(
+        f"✅ {importadas} transações importadas automaticamente.\n"
+        f"⚠️ {len(fila_pendentes)} precisam de revisão (categoria nova ou possível duplicata)."
+    )
+
+    await continuar_categorizacao_ofx(message, state)
+
+
+async def continuar_categorizacao_ofx(message: Message, state: FSMContext):
+    data = await state.get_data()
+    fila = data.get("fila_pendentes", [])
+
+    if not fila:
+        await state.set_state(CadastroState.viewing_registration_menu)
+        await message.answer(
+            "🎉 Importação concluída!",
+            reply_markup=keyboards.cadastro_menu_keyboard()
+        )
+        return
+
+    atual = fila[0]
+    await state.set_state(CadastroState.categorizando_ofx)
+
+    duplicata = atual.get("duplicata_info")
+    aviso_duplicata = ""
+    if duplicata:
+        aviso_duplicata = (
+            f"\n⚠️ Possível duplicata!\n"
+            f"Já existe lançamento de R$ {float(duplicata['valor']):.2f} "
+            f"em {duplicata['data_transacao']} ({duplicata['descricao']}, "
+            f"categoria: {duplicata['categoria_text']}).\n"
+            f"Se for a mesma despesa/receita, toque em ⏭️ Pular esta transação.\n"
+        )
+
+    categoria_sugerida = ""
+    if atual.get("categoria_text"):
+        categoria_sugerida = f"\n💡 Categoria sugerida: {atual['categoria_text']}"
+
+    await message.answer(
+        f"Revise esta transação:\n\n"
+        f"📝 {atual['descricao']}\n"
+        f"💰 R$ {atual['valor']:.2f}\n"
+        f"📅 {atual['data_transacao']}"
+        f"{aviso_duplicata}"
+        f"{categoria_sugerida}\n\n"
+        f"Escolha a categoria ou pule:",
+        reply_markup=keyboards.get_main_category_keyboard_com_pular(atual["tipo"])
+    )
+
+
+@router.message(StateFilter(CadastroState.categorizando_ofx))
+async def receber_categoria_ofx(message: Message, state: FSMContext):
+    data = await state.get_data()
+    fila = data.get("fila_pendentes", [])
+    codigo_casa = data.get("codigo_casa")
+
+    if not fila:
+        await state.set_state(CadastroState.viewing_registration_menu)
+        return
+
+    atual = fila.pop(0)
+    texto = (message.text or "").strip()
+
+    if texto == "⏭️ Pular esta transação":
+        await state.update_data(fila_pendentes=fila)
+        await message.answer("⏭️ Transação ignorada (não cadastrada).")
+        await continuar_categorizacao_ofx(message, state)
+        return
+
+    if is_back_command(message):
+        await state.update_data(fila_pendentes=fila)
+        await message.answer("⏭️ Transação ignorada (não cadastrada).")
+        await continuar_categorizacao_ofx(message, state)
+        return
+
+    atual.pop("duplicata_info", None)
+    categoria = texto
+    atual["categoria_text"] = categoria
+    atual["subcategoria_text"] = None
+    atual["forma_pagamento"] = atual.get("forma_pagamento") or "Pix / Dinheiro"
+
+    await database.insert_transacao(atual)
+    await database.salvar_categoria_aprendida(
+        codigo_casa, atual["descricao"], categoria, None, atual["forma_pagamento"]
+    )
+
+    await state.update_data(fila_pendentes=fila)
+    await continuar_categorizacao_ofx(message, state)
